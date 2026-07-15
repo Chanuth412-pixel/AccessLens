@@ -1,0 +1,45 @@
+
+Open the project folder
+
+Run npm install
+
+Build the extension:
+Run npm run build
+This creates the production extension files inside the dist folder.
+
+Open Chrome extensions page
+
+Open Google Chrome and go to: chrome://extensions
+
+Turn on Developer Mode
+
+Load the extension
+Click Load unpacked
+Then select the dist folder from this project.
+
+Confirm AccessLens is installed
+You should see AccessLens listed on the Chrome extensions page.
+
+Test the popup
+Click the AccessLens extension icon in Chrome.
+The popup UI should open.
+
+Test the page overlay
+Open this test page: https://www.selenium.dev/selenium/web/web-form.html
+The AccessLens panel should appear on the right side of the page.
+
+Fill the original form from the overlay
+Enter values in the AccessLens panel.
+
+Click: Fill Original Form
+The matching fields in the Selenium test form should be filled.
+The form should not submit automatically.
+
+
+Reload after code changes
+After changing project files, run:
+npm run build
+
+Then go back to: chrome://extensions
+Click the reload button on the AccessLens extension card.
+Refresh the Selenium test page if it is already open.

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "AccessLens",
+  "version": "0.1.0",
+  "description": "A simple prototype interface for public-service websites.",
+  "action": {
+    "default_title": "AccessLens",
+    "default_popup": "index.html"
+  },
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": ["https://www.selenium.dev/selenium/web/web-form.html"],
+      "js": ["assets/contentScript.js"]
+    }
+  ]
+}
