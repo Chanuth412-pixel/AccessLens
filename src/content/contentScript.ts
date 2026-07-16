@@ -1,58 +1,26 @@
 import stylesText from "./contentStyles.css?inline";
-
-type AccessLensValues = {
-  textInput: string;
-  password: string;
-  datalist: string;
-  textarea: string;
-};
+import type { AccessLensField, AccessLensTemplate } from "../types/accessLensTemplate";
 
 const overlayId = "accesslens-overlay-root";
+const templateApiUrl = "http://localhost:4000/api/templates/match";
 
-const fields = [
-  {
-    key: "textInput",
-    label: "Text Input",
-    originalSelector: '[name="my-text"]',
-    required: true
-  },
-  {
-    key: "password",
-    label: "Password",
-    originalSelector: '[name="my-password"]',
-    required: true
-  },
-  {
-    key: "datalist",
-    label: "Dropdown Datalist",
-    originalSelector: '[name="my-datalist"]',
-    required: true
-  },
-  {
-    key: "textarea",
-    label: "Textarea",
-    originalSelector: '[name="my-textarea"]',
-    required: false
-  }
-] as const;
-
-function createTextInput(id: string, label: string, multiline = false) {
+function createTextInput(field: AccessLensField) {
   const wrapper = document.createElement("label");
   wrapper.className = "accesslens-field";
-  wrapper.htmlFor = id;
+  wrapper.htmlFor = field.id;
 
   const labelText = document.createElement("span");
-  labelText.textContent = label;
+  labelText.textContent = field.required ? `${field.label} *` : field.label;
 
-  const input = multiline
+  const input = field.type === "textarea"
     ? document.createElement("textarea")
     : document.createElement("input");
 
-  input.id = id;
-  input.name = id;
+  input.id = field.id;
+  input.name = field.id;
 
   if (input instanceof HTMLInputElement) {
-    input.type = id === "email" ? "email" : "text";
+    input.type = field.type === "textarea" || field.type === "select" ? "text" : field.type;
   }
 
   wrapper.append(labelText, input);
@@ -60,16 +28,31 @@ function createTextInput(id: string, label: string, multiline = false) {
   return { wrapper, input };
 }
 
-function getOverlayValues(panel: HTMLElement): AccessLensValues {
-  return {
-    textInput: getFieldValue(panel, "textInput"),
-    password: getFieldValue(panel, "password"),
-    datalist: getFieldValue(panel, "datalist"),
-    textarea: getFieldValue(panel, "textarea")
-  };
+async function fetchTemplateForCurrentPage() {
+  const response = await fetch(
+    `${templateApiUrl}?url=${encodeURIComponent(window.location.href)}`
+  );
+
+  if (response.status === 404) {
+    throw new Error("No approved AccessLens template was found for this page.");
+  }
+
+  if (!response.ok) {
+    throw new Error("AccessLens could not load the template from the backend.");
+  }
+
+  const data = (await response.json()) as { template: AccessLensTemplate };
+  return data.template;
 }
 
-function getFieldValue(panel: HTMLElement, fieldName: keyof AccessLensValues) {
+function getOverlayValues(panel: HTMLElement, fields: AccessLensField[]) {
+  return fields.reduce<Record<string, string>>((values, field) => {
+    values[field.id] = getFieldValue(panel, field.id);
+    return values;
+  }, {});
+}
+
+function getFieldValue(panel: HTMLElement, fieldName: string) {
   const field = panel.querySelector<HTMLInputElement | HTMLTextAreaElement>(
     `[name="${fieldName}"]`
   );
@@ -77,9 +60,9 @@ function getFieldValue(panel: HTMLElement, fieldName: keyof AccessLensValues) {
   return field?.value.trim() ?? "";
 }
 
-function validateValues(values: AccessLensValues) {
+function validateValues(values: Record<string, string>, fields: AccessLensField[]) {
   const missingFields = fields
-    .filter((field) => field.required && !values[field.key].trim())
+    .filter((field) => field.required && !values[field.id]?.trim())
     .map((field) => field.label);
 
   if (missingFields.length === 0) {
@@ -89,27 +72,38 @@ function validateValues(values: AccessLensValues) {
   return `Please enter: ${missingFields.join(", ")}.`;
 }
 
-function updateOriginalField(selector: string, value: string) {
+function updateOriginalField(field: AccessLensField, value: string) {
   const originalField = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-    selector
+    field.selector
   );
 
   if (!originalField) {
-    return;
+    return `${field.label} target was not found on the original page.`;
   }
 
   originalField.value = value;
   originalField.dispatchEvent(new Event("input", { bubbles: true }));
   originalField.dispatchEvent(new Event("change", { bubbles: true }));
+
+  return "";
 }
 
-function fillOriginalForm(values: AccessLensValues) {
-  fields.forEach((field) => {
-    updateOriginalField(field.originalSelector, values[field.key]);
-  });
+function fillOriginalForm(values: Record<string, string>, fields: AccessLensField[]) {
+  return fields
+    .map((field) => updateOriginalField(field, values[field.id] ?? ""))
+    .filter(Boolean);
 }
 
-function injectOverlay() {
+function createMessage(className: string, text: string) {
+  const message = document.createElement("p");
+  message.className = className;
+  message.setAttribute("role", "status");
+  message.textContent = text;
+
+  return message;
+}
+
+async function injectOverlay() {
   if (document.getElementById(overlayId)) {
     return;
   }
@@ -122,6 +116,37 @@ function injectOverlay() {
   const style = document.createElement("style");
   style.textContent = stylesText;
 
+  shadowRoot.append(style);
+  document.body.append(root);
+
+  let template: AccessLensTemplate;
+
+  try {
+    template = await fetchTemplateForCurrentPage();
+  } catch (error) {
+    const panel = document.createElement("section");
+    panel.className = "accesslens-panel";
+    panel.setAttribute("aria-label", "AccessLens template status");
+
+    const title = document.createElement("h2");
+    title.textContent = "AccessLens";
+
+    const message = createMessage(
+      "accesslens-message accesslens-message-error",
+      error instanceof Error ? error.message : "AccessLens template loading failed."
+    );
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "accesslens-secondary-button";
+    closeButton.textContent = "Close";
+    closeButton.addEventListener("click", () => root.remove());
+
+    panel.append(title, message, closeButton);
+    shadowRoot.append(panel);
+    return;
+  }
+
   const panel = document.createElement("section");
   panel.className = "accesslens-panel";
   panel.setAttribute("aria-label", "AccessLens form overlay");
@@ -131,7 +156,7 @@ function injectOverlay() {
 
   const description = document.createElement("p");
   description.className = "accesslens-description";
-  description.textContent = "Simple form view for this page";
+  description.textContent = template.templateName;
 
   const message = document.createElement("p");
   message.className = "accesslens-message";
@@ -140,12 +165,8 @@ function injectOverlay() {
   const form = document.createElement("form");
   form.className = "accesslens-form";
 
-  fields.forEach((field) => {
-    const fieldControl = createTextInput(
-      field.key,
-      field.label,
-      field.key === "textarea"
-    );
+  template.fields.forEach((field) => {
+    const fieldControl = createTextInput(field);
     form.append(fieldControl.wrapper);
   });
 
@@ -165,12 +186,11 @@ function injectOverlay() {
   actions.append(fillButton, closeButton);
   form.append(actions);
   panel.append(title, description, form, message);
-  shadowRoot.append(style, panel);
-  document.body.append(root);
+  shadowRoot.append(panel);
 
   fillButton.addEventListener("click", () => {
-    const values = getOverlayValues(panel);
-    const validationError = validateValues(values);
+    const values = getOverlayValues(panel, template.fields);
+    const validationError = validateValues(values, template.fields);
 
     message.className = "accesslens-message";
 
@@ -180,10 +200,17 @@ function injectOverlay() {
       return;
     }
 
-    fillOriginalForm(values);
+    const fillErrors = fillOriginalForm(values, template.fields);
+
+    if (fillErrors.length > 0) {
+      message.classList.add("accesslens-message-error");
+      message.textContent = fillErrors.join(" ");
+      return;
+    }
+
     message.classList.add("accesslens-message-success");
     message.textContent =
-      "AccessLens filled the original form. Please review it manually before submitting.";
+      "AccessLens filled the original form using the database template. Please review it manually before submitting.";
   });
 
   closeButton.addEventListener("click", () => {
@@ -191,4 +218,4 @@ function injectOverlay() {
   });
 }
 
-injectOverlay();
+void injectOverlay();

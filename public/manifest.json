@@ -8,6 +8,7 @@
     "default_popup": "index.html"
   },
   "permissions": [],
+  "host_permissions": ["http://localhost:4000/*"],
   "content_scripts": [
     {
       "matches": ["https://www.selenium.dev/selenium/web/web-form.html"],

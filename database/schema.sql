@@ -1,0 +1,107 @@
+create extension if not exists pgcrypto;
+
+create table if not exists sites (
+  id uuid primary key default gen_random_uuid(),
+  site_key text not null unique,
+  site_name text not null,
+  base_domain text not null,
+  category text not null default 'public_service',
+  status text not null default 'active'
+    check (status in ('active', 'inactive', 'archived')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists templates (
+  id uuid primary key default gen_random_uuid(),
+  site_id uuid not null references sites(id) on delete cascade,
+  template_key text not null unique,
+  template_name text not null,
+  version text not null,
+  status text not null default 'draft'
+    check (status in ('draft', 'pending_review', 'approved', 'archived')),
+  url_patterns text[] not null,
+  template_json jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists template_versions (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references templates(id) on delete cascade,
+  version text not null,
+  status text not null default 'draft'
+    check (status in ('draft', 'pending_review', 'approved', 'archived')),
+  template_json jsonb not null,
+  change_note text,
+  created_by text,
+  created_at timestamptz not null default now(),
+  unique (template_id, version)
+);
+
+create table if not exists field_mappings (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references templates(id) on delete cascade,
+  field_key text not null,
+  label text not null,
+  input_type text not null
+    check (input_type in ('text', 'password', 'email', 'tel', 'number', 'select', 'textarea')),
+  selector text not null,
+  xpath text,
+  required boolean not null default false,
+  validation_rule text,
+  options_json jsonb,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (template_id, field_key)
+);
+
+create table if not exists runner_instructions (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references templates(id) on delete cascade,
+  step_order integer not null,
+  instruction_type text not null
+    check (
+      instruction_type in (
+        'fill',
+        'click',
+        'select',
+        'waitForElement',
+        'prompt_user',
+        'review',
+        'submit_after_confirm'
+      )
+    ),
+  field_key text,
+  selector text,
+  xpath text,
+  value_source text,
+  wait_ms integer,
+  metadata_json jsonb,
+  created_at timestamptz not null default now(),
+  unique (template_id, step_order)
+);
+
+create table if not exists validation_rules (
+  id uuid primary key default gen_random_uuid(),
+  rule_key text not null unique,
+  rule_name text not null,
+  regex_pattern text,
+  description text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists anonymous_template_errors (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid references templates(id) on delete set null,
+  template_version text,
+  url text,
+  error_code text not null,
+  error_message text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_templates_status on templates(status);
+create index if not exists idx_templates_site_id on templates(site_id);
+create index if not exists idx_field_mappings_template_id on field_mappings(template_id);
+create index if not exists idx_runner_instructions_template_id on runner_instructions(template_id);

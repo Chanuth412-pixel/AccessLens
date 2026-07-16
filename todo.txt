@@ -1,45 +1,131 @@
+AccessLens Setup And Test Checklist
 
-Open the project folder
+1. Install frontend dependencies
 
-Run npm install
+Open the project folder:
+C:\Projects\Acceslense\AccessLens
 
-Build the extension:
-Run npm run build
-This creates the production extension files inside the dist folder.
+Run:
+npm install
 
-Open Chrome extensions page
+2. Set up the database
 
-Open Google Chrome and go to: chrome://extensions
+Create a PostgreSQL database for AccessLens.
 
-Turn on Developer Mode
+Run this SQL file first:
+database/schema.sql
 
-Load the extension
-Click Load unpacked
-Then select the dist folder from this project.
+Then run this seed/demo data file:
+database/seed.sql
 
-Confirm AccessLens is installed
-You should see AccessLens listed on the Chrome extensions page.
+The seed file adds a demo template for:
+https://www.selenium.dev/selenium/web/web-form.html
 
-Test the popup
-Click the AccessLens extension icon in Chrome.
-The popup UI should open.
+3. Configure backend database credentials
 
-Test the page overlay
-Open this test page: https://www.selenium.dev/selenium/web/web-form.html
-The AccessLens panel should appear on the right side of the page.
+Copy:
+backend/.env.example
 
-Fill the original form from the overlay
-Enter values in the AccessLens panel.
+Create:
+backend/.env
 
-Click: Fill Original Form
-The matching fields in the Selenium test form should be filled.
-The form should not submit automatically.
+Fill these values:
+DB_HOST=your_host
+DB_PORT=5432
+DB_NAME=your_database
+DB_USER=your_user
+DB_PASSWORD=your_password
+DB_SSL=false
+PORT=4000
 
+Use DB_SSL=true if your database provider requires SSL.
 
-Reload after code changes
-After changing project files, run:
+4. Install backend dependencies
+
+Open:
+C:\Projects\Acceslense\AccessLens\backend
+
+Run:
+npm install
+
+5. Start the backend API
+
+From the backend folder, run:
+npm run dev
+
+Check backend health in the browser:
+http://localhost:4000/api/health
+
+Test the template match endpoint:
+http://localhost:4000/api/templates/match?url=https%3A%2F%2Fwww.selenium.dev%2Fselenium%2Fweb%2Fweb-form.html
+
+6. Build the extension
+
+From the main project folder, run:
 npm run build
 
-Then go back to: chrome://extensions
+This creates the production extension files inside:
+dist
+
+7. Load the extension in Chrome
+
+Open Chrome and go to:
+chrome://extensions
+
+Turn on Developer Mode.
+
+Click:
+Load unpacked
+
+Select the dist folder from this project.
+
+Confirm AccessLens is installed.
+
+8. Test the popup
+
+Click the AccessLens extension icon in Chrome.
+
+The popup UI should open.
+
+9. Test the page overlay
+
+Open this test page:
+https://www.selenium.dev/selenium/web/web-form.html
+
+The AccessLens panel should appear on the right side of the page.
+
+10. Fill the original form from the overlay
+
+Enter values in the AccessLens panel.
+
+Click:
+Fill Original Form
+
+The matching fields in the Selenium test form should be filled.
+
+The form should not submit automatically.
+
+11. Reload after code changes
+
+After changing frontend or extension files, run:
+npm run build
+
+Then go back to:
+chrome://extensions
+
 Click the reload button on the AccessLens extension card.
+
 Refresh the Selenium test page if it is already open.
+
+12. Backend and database reminder
+
+The database should store only template/config data.
+
+Do not store:
+NIC numbers
+names
+phone numbers
+passwords
+OTP codes
+filled form values
+payment details
