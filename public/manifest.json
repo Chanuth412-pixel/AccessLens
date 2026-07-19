@@ -11,7 +11,11 @@
   "host_permissions": ["http://localhost:4000/*"],
   "content_scripts": [
     {
-      "matches": ["https://www.selenium.dev/selenium/web/web-form.html"],
+      "matches": [
+        "https://www.selenium.dev/selenium/web/web-form.html",
+        "https://*.gov.lk/*",
+        "http://*.gov.lk/*"
+      ],
       "js": ["assets/contentScript.js"]
     }
   ]

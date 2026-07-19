@@ -54,7 +54,8 @@
 }
 
 .accesslens-field input,
-.accesslens-field textarea {
+.accesslens-field textarea,
+.accesslens-field select {
   width: 100%;
   border: 1px solid #b9c4d3;
   border-radius: 6px;
@@ -72,7 +73,8 @@
 }
 
 .accesslens-field input:focus,
-.accesslens-field textarea:focus {
+.accesslens-field textarea:focus,
+.accesslens-field select:focus {
   border-color: #1d4ed8;
   outline: 3px solid rgba(29, 78, 216, 0.18);
 }
@@ -128,4 +130,11 @@
 
 .accesslens-message-success {
   color: #067647;
+}
+
+.accesslens-ai-draft {
+  border-left: 3px solid #b54708;
+  padding: 8px 10px;
+  background: #fff8eb;
+  color: #7a2e0e;
 }
