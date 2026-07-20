@@ -3,7 +3,12 @@ import { z } from "zod";
 export const domElementSnapshotSchema = z.object({
   tag: z.enum(["input", "select", "textarea"]),
   selector: z.string().min(1).max(500),
+  selectorCandidates: z.array(z.string().min(1).max(500)).min(1).max(8),
   label: z.string().min(1).max(200),
+  id: z.string().max(200).optional(),
+  name: z.string().max(200).optional(),
+  placeholder: z.string().max(200).optional(),
+  ariaLabel: z.string().max(200).optional(),
   inputType: z.string().max(40),
   required: z.boolean(),
   options: z.array(z.string().max(200)).max(100),

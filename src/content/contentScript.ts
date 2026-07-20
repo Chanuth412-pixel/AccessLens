@@ -3,6 +3,7 @@ import type { AccessLensField, AccessLensTemplate } from "../types/accessLensTem
 
 const overlayId = "accesslens-overlay-root";
 const backendApiUrl = "http://localhost:4000/api";
+const lowConfidenceThreshold = 0.7;
 
 type TemplateSource = "approved" | "ai" | "database_draft";
 
@@ -15,7 +16,12 @@ type ResolvedTemplate = {
 type DomElementSnapshot = {
   tag: "input" | "select" | "textarea";
   selector: string;
+  selectorCandidates: string[];
   label: string;
+  id?: string;
+  name?: string;
+  placeholder?: string;
+  ariaLabel?: string;
   inputType: string;
   required: boolean;
   options: string[];
@@ -23,6 +29,13 @@ type DomElementSnapshot = {
 };
 
 type FormControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+type FillResult = {
+  label: string;
+  ok: boolean;
+  message: string;
+  lowConfidence: boolean;
+};
 
 function normalizeText(value: string | null | undefined, maxLength = 200) {
   return (value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
@@ -48,53 +61,62 @@ function isUniqueSelector(selector: string) {
   }
 }
 
-function createSelector(element: FormControl) {
+function addUniqueSelector(selectors: string[], selector: string) {
+  if (selector && isUniqueSelector(selector) && !selectors.includes(selector)) {
+    selectors.push(selector);
+  }
+}
+
+function createSelectorCandidates(element: FormControl) {
+  const tag = element.tagName.toLowerCase();
+  const selectors: string[] = [];
+
   if (element.id) {
-    const selector = `#${escapeCssIdentifier(element.id)}`;
-    if (isUniqueSelector(selector)) {
-      return selector;
-    }
+    addUniqueSelector(selectors, `#${escapeCssIdentifier(element.id)}`);
   }
 
   if (element.name) {
-    const selector = `${element.tagName.toLowerCase()}[name="${escapeAttributeValue(element.name)}"]`;
-    if (isUniqueSelector(selector)) {
-      return selector;
+    addUniqueSelector(selectors, `${tag}[name="${escapeAttributeValue(element.name)}"]`);
+  }
+
+  for (const attribute of ["data-testid", "data-test", "data-cy", "data-field"] as const) {
+    const value = element.getAttribute(attribute);
+    if (value) {
+      addUniqueSelector(selectors, `${tag}[${attribute}="${escapeAttributeValue(value)}"]`);
     }
   }
 
-  for (const attribute of ["data-testid", "data-field", "aria-label"] as const) {
-    const value = element.getAttribute(attribute);
-    if (!value) {
-      continue;
-    }
+  const ariaLabel = element.getAttribute("aria-label");
+  if (ariaLabel) {
+    addUniqueSelector(selectors, `${tag}[aria-label="${escapeAttributeValue(ariaLabel)}"]`);
+  }
 
-    const selector = `${element.tagName.toLowerCase()}[${attribute}="${escapeAttributeValue(value)}"]`;
-    if (isUniqueSelector(selector)) {
-      return selector;
-    }
+  const placeholder = element.getAttribute("placeholder");
+  if (placeholder) {
+    addUniqueSelector(selectors, `${tag}[placeholder="${escapeAttributeValue(placeholder)}"]`);
   }
 
   const path: string[] = [];
   let current: Element | null = element;
 
   while (current && current !== document.body) {
-    const tag = current.tagName.toLowerCase();
+    const currentTag = current.tagName.toLowerCase();
     const siblings = current.parentElement
       ? Array.from(current.parentElement.children).filter((sibling) => sibling.tagName === current?.tagName)
       : [];
     const position = siblings.indexOf(current) + 1;
-    path.unshift(`${tag}:nth-of-type(${Math.max(position, 1)})`);
+    path.unshift(`${currentTag}:nth-of-type(${Math.max(position, 1)})`);
 
     const selector = path.join(" > ");
     if (isUniqueSelector(selector)) {
-      return selector;
+      addUniqueSelector(selectors, selector);
+      break;
     }
 
     current = current.parentElement;
   }
 
-  return path.join(" > ");
+  return selectors.slice(0, 8);
 }
 
 function getControlLabel(element: FormControl, index: number) {
@@ -102,7 +124,13 @@ function getControlLabel(element: FormControl, index: number) {
     .map((label) => normalizeText(label.textContent))
     .find(Boolean);
 
+  const labelledBy = element.getAttribute("aria-labelledby")
+    ?.split(/\s+/)
+    .map((id) => normalizeText(document.getElementById(id)?.textContent))
+    .find(Boolean);
+
   return associatedLabel
+    || labelledBy
     || normalizeText(element.getAttribute("aria-label"))
     || normalizeText(element.getAttribute("placeholder"))
     || normalizeText(element.name)
@@ -122,32 +150,39 @@ function getFormContext(element: FormControl) {
     || "";
 }
 
+function isSafeInputType(input: HTMLInputElement) {
+  const inputType = (input.getAttribute("type") || "text").toLowerCase();
+  return new Set(["text", "email", "tel", "number", "date"]).has(inputType);
+}
+
+function isVisibleControl(element: FormControl) {
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
 function isSupportedControl(element: FormControl) {
-  if (element.disabled || element.closest(`[aria-hidden="true"]`)) {
+  if (
+    element.disabled
+    || ("readOnly" in element && element.readOnly)
+    || element.closest(`[aria-hidden="true"]`)
+    || !isVisibleControl(element)
+  ) {
     return false;
   }
 
-  if (element instanceof HTMLInputElement) {
-    const excludedTypes = new Set([
-      "button",
-      "checkbox",
-      "color",
-      "file",
-      "hidden",
-      "image",
-      "radio",
-      "range",
-      "reset",
-      "submit"
-    ]);
+  return !(element instanceof HTMLInputElement) || isSafeInputType(element);
+}
 
-    if (excludedTypes.has(element.type)) {
-      return false;
-    }
+function isSafeFillTarget(element: Element | null): element is FormControl {
+  if (
+    !(element instanceof HTMLInputElement)
+    && !(element instanceof HTMLSelectElement)
+    && !(element instanceof HTMLTextAreaElement)
+  ) {
+    return false;
   }
 
-  const style = window.getComputedStyle(element);
-  return style.display !== "none" && style.visibility !== "hidden";
+  return isSupportedControl(element);
 }
 
 function buildDomSnapshot() {
@@ -158,17 +193,23 @@ function buildDomSnapshot() {
     .slice(0, 100);
 
   return controls.reduce<DomElementSnapshot[]>((snapshot, element, index) => {
-    const selector = createSelector(element);
+    const selectorCandidates = createSelectorCandidates(element);
+    const selector = selectorCandidates[0];
 
-    if (!selector || !isUniqueSelector(selector)) {
+    if (!selector) {
       return snapshot;
     }
 
     snapshot.push({
       tag: element.tagName.toLowerCase() as DomElementSnapshot["tag"],
       selector,
+      selectorCandidates,
       label: getControlLabel(element, index),
-      inputType: element instanceof HTMLInputElement ? element.type : element.tagName.toLowerCase(),
+      id: normalizeText(element.id) || undefined,
+      name: normalizeText(element.name) || undefined,
+      placeholder: normalizeText(element.getAttribute("placeholder")) || undefined,
+      ariaLabel: normalizeText(element.getAttribute("aria-label")) || undefined,
+      inputType: element instanceof HTMLInputElement ? element.type || "text" : element.tagName.toLowerCase(),
       required: element.required || element.getAttribute("aria-required") === "true",
       options: element instanceof HTMLSelectElement
         ? Array.from(element.options)
@@ -186,6 +227,69 @@ function buildDomSnapshot() {
 async function getApiError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null) as { error?: string } | null;
   return data?.error || fallback;
+}
+
+function withRuntimeSafetyDefaults(template: AccessLensTemplate) {
+  return {
+    ...template,
+    source: "ai-runtime-generated" as const,
+    policies: template.policies ?? {
+      storePersonalData: false,
+      autoSubmit: false,
+      manualReviewRequired: true
+    },
+    fields: template.fields.map((field) => ({
+      ...field,
+      originalLabel: field.originalLabel ?? field.label,
+      confidence: typeof field.confidence === "number" ? field.confidence : 0.5,
+      events: field.events ?? ["input", "change"],
+      temporary: true
+    }))
+  };
+}
+
+function validateRuntimeTemplate(template: AccessLensTemplate) {
+  const safeTemplate = withRuntimeSafetyDefaults(template);
+
+  if (!Array.isArray(safeTemplate.fields) || safeTemplate.fields.length === 0) {
+    throw new Error("AI template did not include any fields.");
+  }
+
+  if (
+    safeTemplate.policies.storePersonalData !== false
+    || safeTemplate.policies.autoSubmit !== false
+    || safeTemplate.policies.manualReviewRequired !== true
+  ) {
+    throw new Error("AI template policies are not safe.");
+  }
+
+  for (const field of safeTemplate.fields) {
+    if (
+      !field.id
+      || !field.label
+      || !field.type
+      || !field.selector
+      || typeof field.required !== "boolean"
+      || typeof field.confidence !== "number"
+      || field.confidence < 0
+      || field.confidence > 1
+    ) {
+      throw new Error("AI template has an invalid field mapping.");
+    }
+
+    let target: Element | null = null;
+    try {
+      target = document.querySelector(field.selector);
+    } catch {
+      throw new Error(`AI template selector is invalid: ${field.selector}`);
+    }
+
+    if (!isSafeFillTarget(target)) {
+      throw new Error(`AI template points to an unsafe or unavailable field: ${field.label}`);
+    }
+  }
+
+  return safeTemplate;
 }
 
 async function generateAiTemplate() {
@@ -213,11 +317,16 @@ async function generateAiTemplate() {
     throw new Error(await getApiError(response, "AccessLens could not generate an AI template."));
   }
 
-  return response.json() as Promise<{
+  const generated = await response.json() as {
     template: AccessLensTemplate;
     source: "ai" | "database_draft";
     saved: boolean;
-  }>;
+  };
+
+  return {
+    ...generated,
+    template: validateRuntimeTemplate(generated.template)
+  };
 }
 
 async function resolveTemplateForCurrentPage(): Promise<ResolvedTemplate> {
@@ -271,7 +380,7 @@ function createFieldControl(field: AccessLensField) {
     input = document.createElement("textarea");
   } else {
     const textInput = document.createElement("input");
-    textInput.type = field.type;
+    textInput.type = field.type === "password" ? "text" : field.type;
     input = textInput;
   }
 
@@ -324,30 +433,46 @@ function setNativeValue(element: FormControl, value: string) {
   }
 }
 
-function updateOriginalField(field: AccessLensField, value: string) {
-  let originalField: FormControl | null = null;
+function updateOriginalField(field: AccessLensField, value: string): FillResult {
+  let originalField: Element | null = null;
+  const lowConfidence = typeof field.confidence === "number" && field.confidence < lowConfidenceThreshold;
 
   try {
-    originalField = document.querySelector<FormControl>(field.selector);
+    originalField = document.querySelector(field.selector);
   } catch {
-    return `${field.label} has an invalid target selector.`;
+    return {
+      label: field.label,
+      ok: false,
+      lowConfidence,
+      message: `${field.label} has an invalid target selector. Please fill it manually.`
+    };
   }
 
-  if (!originalField) {
-    return `${field.label} target was not found on the original page.`;
+  if (!isSafeFillTarget(originalField)) {
+    return {
+      label: field.label,
+      ok: false,
+      lowConfidence,
+      message: `${field.label} could not be safely filled. Please fill it manually.`
+    };
   }
 
   setNativeValue(originalField, value);
   originalField.dispatchEvent(new Event("input", { bubbles: true }));
   originalField.dispatchEvent(new Event("change", { bubbles: true }));
 
-  return "";
+  return {
+    label: field.label,
+    ok: true,
+    lowConfidence,
+    message: lowConfidence
+      ? `${field.label} filled successfully. Low confidence mapping. Please verify manually.`
+      : `${field.label} filled successfully.`
+  };
 }
 
 function fillOriginalForm(values: Record<string, string>, fields: AccessLensField[]) {
-  return fields
-    .map((field) => updateOriginalField(field, values[field.id] ?? ""))
-    .filter(Boolean);
+  return fields.map((field) => updateOriginalField(field, values[field.id] ?? ""));
 }
 
 function createMessage(className: string, text: string) {
@@ -371,6 +496,45 @@ function createStatusPanel(titleText: string, messageText: string, error = false
   );
   panel.append(title, message);
   return panel;
+}
+
+function createReviewDetails(values: Record<string, string>, fields: AccessLensField[]) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "accesslens-review";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Review details";
+  wrapper.append(heading);
+
+  for (const field of fields) {
+    const row = document.createElement("div");
+    row.className = "accesslens-review-row";
+
+    const label = document.createElement("strong");
+    label.textContent = field.label;
+
+    const value = document.createElement("span");
+    value.textContent = values[field.id] || "Not entered";
+
+    row.append(label, value);
+    wrapper.append(row);
+  }
+
+  return wrapper;
+}
+
+function createResultList(results: FillResult[]) {
+  const list = document.createElement("ul");
+  list.className = "accesslens-results";
+
+  for (const result of results) {
+    const item = document.createElement("li");
+    item.className = result.ok ? "accesslens-result-success" : "accesslens-result-error";
+    item.textContent = result.message;
+    list.append(item);
+  }
+
+  return list;
 }
 
 async function injectOverlay() {
@@ -412,49 +576,77 @@ async function injectOverlay() {
 
   loadingPanel.remove();
   const { template, source } = resolved;
+  const fields = template.fields.filter((field) => field.type !== "password");
+  const isRuntimeAiTemplate = source !== "approved";
   const panel = document.createElement("section");
   panel.className = "accesslens-panel";
   panel.setAttribute("aria-label", "AccessLens form overlay");
 
   const title = document.createElement("h2");
   title.textContent = "AccessLens";
-  const description = document.createElement("p");
-  description.className = source === "approved"
-    ? "accesslens-description"
-    : "accesslens-description accesslens-ai-draft";
-  description.textContent = source === "approved"
-    ? template.templateName
-    : `AI draft: ${template.templateName}. Review all fields before using it.`;
+
+  const description = document.createElement("div");
+  description.className = isRuntimeAiTemplate
+    ? "accesslens-description accesslens-ai-draft"
+    : "accesslens-description";
+
+  if (isRuntimeAiTemplate) {
+    const draftTitle = document.createElement("strong");
+    draftTitle.textContent = "AI-generated temporary template";
+    const draftNotice = document.createElement("p");
+    draftNotice.textContent = "This website does not have an approved AccessLens template yet.";
+    const draftReview = document.createElement("p");
+    draftReview.textContent = "Please review all mappings carefully before filling the original form.";
+    description.append(draftTitle, draftNotice, draftReview);
+  } else {
+    description.textContent = template.templateName;
+  }
 
   const message = document.createElement("p");
   message.className = "accesslens-message";
   message.setAttribute("role", "status");
+
   const form = document.createElement("form");
   form.className = "accesslens-form";
 
-  template.fields.forEach((field) => {
+  fields.forEach((field) => {
     form.append(createFieldControl(field).wrapper);
   });
 
+  const reviewContainer = document.createElement("div");
+  reviewContainer.className = "accesslens-review-container";
+  reviewContainer.hidden = true;
+
+  const resultContainer = document.createElement("div");
+  resultContainer.className = "accesslens-result-container";
+
   const actions = document.createElement("div");
   actions.className = "accesslens-actions";
-  const fillButton = document.createElement("button");
-  fillButton.type = "button";
-  fillButton.className = "accesslens-primary-button";
-  fillButton.textContent = "Fill Original Form";
+  const reviewButton = document.createElement("button");
+  reviewButton.type = "button";
+  reviewButton.className = "accesslens-primary-button";
+  reviewButton.textContent = "Review Details";
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "accesslens-secondary-button";
   closeButton.textContent = "Close";
-  actions.append(fillButton, closeButton);
-  form.append(actions);
+  actions.append(reviewButton, closeButton);
+  form.append(actions, reviewContainer, resultContainer);
   panel.append(title, description, form, message);
   shadowRoot.append(panel);
 
-  fillButton.addEventListener("click", () => {
-    const values = getOverlayValues(panel, template.fields);
-    const validationError = validateValues(values, template.fields);
+  form.addEventListener("input", () => {
+    reviewContainer.hidden = true;
+    reviewContainer.replaceChildren();
+    resultContainer.replaceChildren();
+    message.textContent = "";
+  });
+
+  reviewButton.addEventListener("click", () => {
+    const values = getOverlayValues(panel, fields);
+    const validationError = validateValues(values, fields);
     message.className = "accesslens-message";
+    resultContainer.replaceChildren();
 
     if (validationError) {
       message.classList.add("accesslens-message-error");
@@ -462,18 +654,35 @@ async function injectOverlay() {
       return;
     }
 
-    const fillErrors = fillOriginalForm(values, template.fields);
+    const confirmButton = document.createElement("button");
+    confirmButton.type = "button";
+    confirmButton.className = "accesslens-primary-button";
+    confirmButton.textContent = "Confirm and Fill Original Form";
 
-    if (fillErrors.length > 0) {
-      message.classList.add("accesslens-message-error");
-      message.textContent = fillErrors.join(" ");
-      return;
-    }
+    confirmButton.addEventListener("click", () => {
+      const latestValues = getOverlayValues(panel, fields);
+      const latestValidationError = validateValues(latestValues, fields);
+      message.className = "accesslens-message";
+      resultContainer.replaceChildren();
 
-    message.classList.add("accesslens-message-success");
-    message.textContent = source === "approved"
-      ? "The original form was filled from the approved template. Review it before submitting."
-      : "The original form was filled from an AI draft. Check every field carefully before submitting.";
+      if (latestValidationError) {
+        message.classList.add("accesslens-message-error");
+        message.textContent = latestValidationError;
+        return;
+      }
+
+      const results = fillOriginalForm(latestValues, fields);
+      const hasErrors = results.some((result) => !result.ok);
+      resultContainer.append(createResultList(results));
+      message.classList.add(hasErrors ? "accesslens-message-error" : "accesslens-message-success");
+      message.textContent = hasErrors
+        ? "Some fields need manual attention. The original form was not submitted."
+        : "Fields were filled. Review the original website form before submitting it yourself.";
+    });
+
+    reviewContainer.replaceChildren(createReviewDetails(values, fields), confirmButton);
+    reviewContainer.hidden = false;
+    message.textContent = "Review the details and mappings before confirming.";
   });
 
   closeButton.addEventListener("click", () => root.remove());

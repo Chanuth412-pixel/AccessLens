@@ -3,12 +3,16 @@ export type TemplateStatus = "draft" | "pending_review" | "approved" | "archived
 export type AccessLensField = {
   id: string;
   label: string;
-  type: "text" | "password" | "email" | "tel" | "number" | "select" | "textarea";
+  type: "text" | "password" | "email" | "tel" | "number" | "date" | "select" | "textarea";
   selector: string;
   xpath?: string;
   required?: boolean;
   validationRule?: string;
   options?: string[];
+  originalLabel?: string;
+  confidence?: number;
+  events?: Array<"input" | "change">;
+  temporary?: boolean;
 };
 
 export type RunnerInstruction = {
@@ -22,6 +26,7 @@ export type RunnerInstruction = {
 };
 
 export type AccessLensTemplate = {
+  source?: "approved" | "ai-runtime-generated";
   siteId: string;
   siteName: string;
   templateKey: string;
@@ -30,4 +35,9 @@ export type AccessLensTemplate = {
   urlPatterns: string[];
   fields: AccessLensField[];
   instructions: RunnerInstruction[];
+  policies?: {
+    storePersonalData: false;
+    autoSubmit: false;
+    manualReviewRequired: true;
+  };
 };

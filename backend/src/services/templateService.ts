@@ -163,7 +163,7 @@ export async function saveGeneratedTemplateDraft(template: AccessLensTemplate) {
           templateId,
           field.id,
           field.label,
-          field.type,
+          field.type === "date" ? "text" : field.type,
           field.selector,
           field.xpath ?? null,
           field.required ?? false,

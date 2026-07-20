@@ -13,6 +13,31 @@ const requestHistory = new Map<string, number[]>();
 const rateLimitWindowMs = 10 * 60 * 1000;
 const maxGenerationsPerWindow = 5;
 
+function toTemporaryManifest(template: Awaited<ReturnType<typeof generateTemplateWithAi>>) {
+  return {
+    source: "ai-runtime-generated",
+    site: {
+      url: template.urlPatterns[0],
+      name: template.siteName
+    },
+    fields: template.fields.map((field) => ({
+      key: field.id,
+      label: field.label,
+      type: field.type,
+      required: field.required ?? false,
+      selector: field.selector,
+      originalLabel: field.originalLabel ?? field.label,
+      confidence: field.confidence ?? 0.5,
+      events: field.events ?? ["input", "change"]
+    })),
+    policies: template.policies ?? {
+      storePersonalData: false,
+      autoSubmit: false,
+      manualReviewRequired: true
+    }
+  };
+}
+
 function isRateLimited(clientId: string) {
   const now = Date.now();
   const recentRequests = (requestHistory.get(clientId) ?? [])
@@ -36,6 +61,7 @@ aiRouter.post("/generate-template", async (request, response, next) => {
     if (existingDraft) {
       response.json({
         template: existingDraft,
+        temporaryManifest: toTemporaryManifest(existingDraft),
         source: "database_draft",
         status: "pending_review",
         saved: true
@@ -62,6 +88,7 @@ aiRouter.post("/generate-template", async (request, response, next) => {
 
     response.status(201).json({
       template,
+      temporaryManifest: toTemporaryManifest(template),
       source: "ai",
       status: "pending_review",
       saved

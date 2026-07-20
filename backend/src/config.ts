@@ -18,7 +18,10 @@ const aiProvider = process.env.AI_PROVIDER ?? (
 
 export const config = {
   port: Number(process.env.PORT ?? 4000),
-  frontendOrigin: process.env.FRONTEND_ORIGIN ?? "*",
+  frontendOrigins: (process.env.FRONTEND_ORIGIN ?? "*")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   ai: {
     provider: aiProvider,
     openaiApiKey: process.env.OPENAI_API_KEY ?? "",

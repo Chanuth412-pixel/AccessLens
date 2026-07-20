@@ -3,12 +3,16 @@ import { z } from "zod";
 export const accessLensFieldSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
-  type: z.enum(["text", "password", "email", "tel", "number", "select", "textarea"]),
+  type: z.enum(["text", "password", "email", "tel", "number", "date", "select", "textarea"]),
   selector: z.string().min(1),
   xpath: z.string().optional(),
   required: z.boolean().optional(),
   validationRule: z.string().optional(),
-  options: z.array(z.string()).optional()
+  options: z.array(z.string()).optional(),
+  originalLabel: z.string().optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  events: z.array(z.enum(["input", "change"])).optional(),
+  temporary: z.boolean().optional()
 });
 
 export const runnerInstructionSchema = z.object({
@@ -30,6 +34,7 @@ export const runnerInstructionSchema = z.object({
 });
 
 export const accessLensTemplateSchema = z.object({
+  source: z.enum(["approved", "ai-runtime-generated"]).optional(),
   siteId: z.string().min(1),
   siteName: z.string().min(1),
   templateKey: z.string().min(1),
@@ -37,5 +42,10 @@ export const accessLensTemplateSchema = z.object({
   version: z.string().min(1),
   urlPatterns: z.array(z.string().min(1)).min(1),
   fields: z.array(accessLensFieldSchema),
-  instructions: z.array(runnerInstructionSchema)
+  instructions: z.array(runnerInstructionSchema),
+  policies: z.object({
+    storePersonalData: z.literal(false),
+    autoSubmit: z.literal(false),
+    manualReviewRequired: z.literal(true)
+  }).optional()
 });

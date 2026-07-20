@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AccessLens Unknown Site Test Form</title>
+    <style>
+      body {
+        max-width: 680px;
+        margin: 40px auto;
+        padding: 0 20px;
+        font-family: Arial, sans-serif;
+        color: #172033;
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+      }
+
+      input,
+      select,
+      textarea,
+      button {
+        min-height: 38px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 90px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Unknown Site Test Form</h1>
+    <form id="unknown-form">
+      <label>
+        Full name
+        <input id="full-name" name="fullName" type="text" required />
+      </label>
+
+      <label>
+        Mobile number
+        <input id="mobile-number" name="mobileNumber" type="tel" required />
+      </label>
+
+      <label>
+        Date of birth
+        <input id="date-of-birth" name="dateOfBirth" type="date" />
+      </label>
+
+      <label>
+        Province
+        <select id="province" name="province" required>
+          <option value="">Select province</option>
+          <option>Western</option>
+          <option>Central</option>
+          <option>Southern</option>
+        </select>
+      </label>
+
+      <label>
+        Message
+        <textarea id="message" name="message" placeholder="Optional note"></textarea>
+      </label>
+
+      <input type="password" name="secretCode" value="must-not-be-read" />
+      <input type="hidden" name="hiddenToken" value="must-not-be-sent" />
+      <button type="submit">Submit</button>
+    </form>
+  </body>
+</html>

@@ -45,7 +45,7 @@ create table if not exists field_mappings (
   field_key text not null,
   label text not null,
   input_type text not null
-    check (input_type in ('text', 'password', 'email', 'tel', 'number', 'select', 'textarea')),
+    check (input_type in ('text', 'password', 'email', 'tel', 'number', 'date', 'select', 'textarea')),
   selector text not null,
   xpath text,
   required boolean not null default false,
