@@ -10,7 +10,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: "index.html",
-        contentScript: "src/content/contentScript.ts"
+        contentScript: "src/content/contentScript.ts",
+        background: "src/background/background.ts"
       },
       output: {
         entryFileNames: "assets/[name].js",

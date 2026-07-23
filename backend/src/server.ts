@@ -9,9 +9,15 @@ import { templatesRouter } from "./routes/templates.js";
 
 const app = express();
 
+app.use((_req, res, next) => {
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
+  next();
+});
+
 app.use(
   cors({
-    origin: config.frontendOrigins.includes("*") ? true : config.frontendOrigins
+    origin: config.frontendOrigins.includes("*") ? true : config.frontendOrigins,
+    credentials: true
   })
 );
 app.use(express.json({ limit: "1mb" }));

@@ -6,6 +6,7 @@ const backendApiUrl = "http://localhost:4000/api";
 const lowConfidenceThreshold = 0.7;
 
 type TemplateSource = "approved" | "ai" | "database_draft";
+type ViewMode = "all" | "wizard";
 
 type ResolvedTemplate = {
   template: AccessLensTemplate;
@@ -224,6 +225,58 @@ function buildDomSnapshot() {
   }, []);
 }
 
+declare const chrome: {
+  runtime?: {
+    lastError?: { message?: string };
+    sendMessage: (
+      message: { type: string; url: string; method?: string; headers?: Record<string, string>; body?: unknown },
+      callback: (response: { ok: boolean; status: number; data?: unknown; error?: string } | undefined) => void
+    ) => void;
+  };
+};
+
+async function apiFetch(
+  url: string,
+  options: { method?: string; headers?: Record<string, string>; body?: unknown } = {}
+): Promise<Response> {
+  const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+  if (runtime && typeof runtime.sendMessage === "function") {
+    try {
+      const response = await new Promise<{ ok: boolean; status: number; data?: unknown; error?: string }>(
+        (resolve) => {
+          runtime.sendMessage(
+            { type: "FETCH_API", url, method: options.method, headers: options.headers, body: options.body },
+            (res) => {
+              if (runtime.lastError || !res) {
+                resolve({ ok: false, status: 0, error: runtime.lastError?.message || "No response" });
+              } else {
+                resolve(res);
+              }
+            }
+          );
+        }
+      );
+
+      if (response.status !== 0) {
+        return {
+          ok: response.ok,
+          status: response.status,
+          json: async () => response.data,
+          text: async () => (typeof response.data === "string" ? response.data : JSON.stringify(response.data))
+        } as unknown as Response;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return fetch(url, {
+    method: options.method || "GET",
+    headers: options.headers as HeadersInit,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+}
+
 async function getApiError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null) as { error?: string } | null;
   return data?.error || fallback;
@@ -299,10 +352,10 @@ async function generateAiTemplate() {
     throw new Error("No supported form fields were found on this page.");
   }
 
-  const response = await fetch(`${backendApiUrl}/ai/generate-template`, {
+  const response = await apiFetch(`${backendApiUrl}/ai/generate-template`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: {
       url: window.location.href,
       title: normalizeText(document.title, 300),
       language: normalizeText(
@@ -310,7 +363,7 @@ async function generateAiTemplate() {
         30
       ),
       elements
-    })
+    }
   });
 
   if (!response.ok) {
@@ -330,7 +383,7 @@ async function generateAiTemplate() {
 }
 
 async function resolveTemplateForCurrentPage(): Promise<ResolvedTemplate> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${backendApiUrl}/templates/match?url=${encodeURIComponent(window.location.href)}`
   );
 
@@ -498,6 +551,36 @@ function createStatusPanel(titleText: string, messageText: string, error = false
   return panel;
 }
 
+let currentHighlightedElement: HTMLElement | null = null;
+let originalOutlineStyle = "";
+let originalBoxShadowStyle = "";
+
+function highlightTargetElement(selector: string) {
+  if (currentHighlightedElement) {
+    currentHighlightedElement.style.outline = originalOutlineStyle;
+    currentHighlightedElement.style.boxShadow = originalBoxShadowStyle;
+    currentHighlightedElement = null;
+  }
+
+  if (!selector) {
+    return;
+  }
+
+  try {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) {
+      currentHighlightedElement = element;
+      originalOutlineStyle = element.style.outline;
+      originalBoxShadowStyle = element.style.boxShadow;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      element.style.outline = "4px solid #2563eb";
+      element.style.boxShadow = "0 0 16px rgba(37, 99, 235, 0.7)";
+    }
+  } catch {
+    // Ignore selector syntax error
+  }
+}
+
 function createReviewDetails(values: Record<string, string>, fields: AccessLensField[]) {
   const wrapper = document.createElement("div");
   wrapper.className = "accesslens-review";
@@ -578,6 +661,11 @@ async function injectOverlay() {
   const { template, source } = resolved;
   const fields = template.fields.filter((field) => field.type !== "password");
   const isRuntimeAiTemplate = source !== "approved";
+
+  let viewMode: ViewMode = "wizard";
+  let currentStepIndex = 0;
+  const formValuesState: Record<string, string> = {};
+
   const panel = document.createElement("section");
   panel.className = "accesslens-panel";
   panel.setAttribute("aria-label", "AccessLens form overlay");
@@ -602,6 +690,21 @@ async function injectOverlay() {
     description.textContent = template.templateName;
   }
 
+  const modeSwitcher = document.createElement("div");
+  modeSwitcher.className = "accesslens-mode-switcher";
+
+  const wizardModeBtn = document.createElement("button");
+  wizardModeBtn.type = "button";
+  wizardModeBtn.className = `accesslens-mode-btn ${(viewMode as ViewMode) === "wizard" ? "active" : ""}`;
+  wizardModeBtn.textContent = "🧙‍♂️ Step-by-Step Wizard";
+
+  const allFieldsModeBtn = document.createElement("button");
+  allFieldsModeBtn.type = "button";
+  allFieldsModeBtn.className = `accesslens-mode-btn ${(viewMode as ViewMode) === "all" ? "active" : ""}`;
+  allFieldsModeBtn.textContent = "📋 All Fields View";
+
+  modeSwitcher.append(wizardModeBtn, allFieldsModeBtn);
+
   const message = document.createElement("p");
   message.className = "accesslens-message";
   message.setAttribute("role", "status");
@@ -609,9 +712,8 @@ async function injectOverlay() {
   const form = document.createElement("form");
   form.className = "accesslens-form";
 
-  fields.forEach((field) => {
-    form.append(createFieldControl(field).wrapper);
-  });
+  const formContentContainer = document.createElement("div");
+  formContentContainer.className = "accesslens-form-content";
 
   const reviewContainer = document.createElement("div");
   reviewContainer.className = "accesslens-review-container";
@@ -622,29 +724,37 @@ async function injectOverlay() {
 
   const actions = document.createElement("div");
   actions.className = "accesslens-actions";
-  const reviewButton = document.createElement("button");
-  reviewButton.type = "button";
-  reviewButton.className = "accesslens-primary-button";
-  reviewButton.textContent = "Review Details";
+
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "accesslens-secondary-button";
   closeButton.textContent = "Close";
-  actions.append(reviewButton, closeButton);
-  form.append(actions, reviewContainer, resultContainer);
-  panel.append(title, description, form, message);
+
+  form.append(formContentContainer, actions, reviewContainer, resultContainer);
+  panel.append(title, description, modeSwitcher, form, message);
   shadowRoot.append(panel);
 
-  form.addEventListener("input", () => {
-    reviewContainer.hidden = true;
-    reviewContainer.replaceChildren();
-    resultContainer.replaceChildren();
-    message.textContent = "";
-  });
+  const syncStateFromDom = () => {
+    fields.forEach((field) => {
+      const value = getFieldValue(panel, field.id);
+      if (value !== "") {
+        formValuesState[field.id] = value;
+      }
+    });
+  };
 
-  reviewButton.addEventListener("click", () => {
-    const values = getOverlayValues(panel, fields);
-    const validationError = validateValues(values, fields);
+  const syncStateToDom = () => {
+    fields.forEach((field) => {
+      const input = panel.querySelector<FormControl>(`[name="${escapeAttributeValue(field.id)}"]`);
+      if (input && formValuesState[field.id] !== undefined) {
+        input.value = formValuesState[field.id];
+      }
+    });
+  };
+
+  const handleReviewFlow = () => {
+    syncStateFromDom();
+    const validationError = validateValues(formValuesState, fields);
     message.className = "accesslens-message";
     resultContainer.replaceChildren();
 
@@ -660,8 +770,8 @@ async function injectOverlay() {
     confirmButton.textContent = "Confirm and Fill Original Form";
 
     confirmButton.addEventListener("click", () => {
-      const latestValues = getOverlayValues(panel, fields);
-      const latestValidationError = validateValues(latestValues, fields);
+      syncStateFromDom();
+      const latestValidationError = validateValues(formValuesState, fields);
       message.className = "accesslens-message";
       resultContainer.replaceChildren();
 
@@ -671,7 +781,7 @@ async function injectOverlay() {
         return;
       }
 
-      const results = fillOriginalForm(latestValues, fields);
+      const results = fillOriginalForm(formValuesState, fields);
       const hasErrors = results.some((result) => !result.ok);
       resultContainer.append(createResultList(results));
       message.classList.add(hasErrors ? "accesslens-message-error" : "accesslens-message-success");
@@ -680,12 +790,167 @@ async function injectOverlay() {
         : "Fields were filled. Review the original website form before submitting it yourself.";
     });
 
-    reviewContainer.replaceChildren(createReviewDetails(values, fields), confirmButton);
+    reviewContainer.replaceChildren(createReviewDetails(formValuesState, fields), confirmButton);
     reviewContainer.hidden = false;
     message.textContent = "Review the details and mappings before confirming.";
+  };
+
+  const renderFormContent = () => {
+    reviewContainer.hidden = true;
+    reviewContainer.replaceChildren();
+    resultContainer.replaceChildren();
+    message.textContent = "";
+
+    wizardModeBtn.className = `accesslens-mode-btn ${(viewMode as ViewMode) === "wizard" ? "active" : ""}`;
+    allFieldsModeBtn.className = `accesslens-mode-btn ${(viewMode as ViewMode) === "all" ? "active" : ""}`;
+
+    formContentContainer.replaceChildren();
+    actions.replaceChildren();
+
+    if ((viewMode as ViewMode) === "all") {
+      highlightTargetElement("");
+
+      fields.forEach((field) => {
+        const { wrapper, input } = createFieldControl(field);
+        if (formValuesState[field.id]) {
+          input.value = formValuesState[field.id];
+        }
+        input.addEventListener("input", (e) => {
+          formValuesState[field.id] = (e.target as FormControl).value.trim();
+        });
+        formContentContainer.append(wrapper);
+      });
+
+      const reviewButton = document.createElement("button");
+      reviewButton.type = "button";
+      reviewButton.className = "accesslens-primary-button";
+      reviewButton.textContent = "Review Details";
+      reviewButton.addEventListener("click", handleReviewFlow);
+
+      actions.append(reviewButton, closeButton);
+    } else {
+      const currentField = fields[currentStepIndex];
+
+      if (currentField) {
+        highlightTargetElement(currentField.selector);
+      }
+
+      const wizardContainer = document.createElement("div");
+      wizardContainer.className = "accesslens-wizard-container";
+
+      const header = document.createElement("div");
+      header.className = "accesslens-wizard-header";
+
+      const meta = document.createElement("div");
+      meta.className = "accesslens-wizard-meta";
+      const stepText = document.createElement("span");
+      stepText.textContent = `Step ${currentStepIndex + 1} of ${fields.length}`;
+      const percentText = document.createElement("span");
+      const progressPercent = Math.round(((currentStepIndex + 1) / fields.length) * 100);
+      percentText.textContent = `${progressPercent}% Completed`;
+      meta.append(stepText, percentText);
+
+      const progressBar = document.createElement("div");
+      progressBar.className = "accesslens-progress-bar";
+      const progressFill = document.createElement("div");
+      progressFill.className = "accesslens-progress-fill";
+      progressFill.style.width = `${progressPercent}%`;
+      progressBar.append(progressFill);
+
+      header.append(meta, progressBar);
+
+      const dotsContainer = document.createElement("div");
+      dotsContainer.className = "accesslens-step-dots";
+      fields.forEach((_, idx) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = `accesslens-dot ${idx === currentStepIndex ? "active" : ""} ${
+          formValuesState[fields[idx].id] ? "completed" : ""
+        }`;
+        dot.title = `Go to Step ${idx + 1}: ${fields[idx].label}`;
+        dot.addEventListener("click", () => {
+          syncStateFromDom();
+          currentStepIndex = idx;
+          renderFormContent();
+        });
+        dotsContainer.append(dot);
+      });
+
+      const card = document.createElement("div");
+      card.className = "accesslens-wizard-card";
+
+      const { wrapper, input } = createFieldControl(currentField);
+      if (formValuesState[currentField.id]) {
+        input.value = formValuesState[currentField.id];
+      }
+      input.addEventListener("input", (e) => {
+        formValuesState[currentField.id] = (e.target as FormControl).value.trim();
+      });
+
+      const hint = document.createElement("p");
+      hint.className = "accesslens-wizard-hint";
+      hint.textContent = "💡 Enter your details clearly as shown on official documents.";
+
+      card.append(wrapper, hint);
+
+      const nav = document.createElement("div");
+      nav.className = "accesslens-wizard-nav";
+
+      const prevBtn = document.createElement("button");
+      prevBtn.type = "button";
+      prevBtn.className = "accesslens-secondary-button";
+      prevBtn.textContent = "⬅️ Back";
+      prevBtn.disabled = currentStepIndex === 0;
+      prevBtn.addEventListener("click", () => {
+        syncStateFromDom();
+        if (currentStepIndex > 0) {
+          currentStepIndex--;
+          renderFormContent();
+        }
+      });
+
+      const isLastStep = currentStepIndex === fields.length - 1;
+      const nextBtn = document.createElement("button");
+      nextBtn.type = "button";
+      nextBtn.className = "accesslens-primary-button";
+      nextBtn.textContent = isLastStep ? "Review Details 🎯" : "Next ➡️";
+
+      nextBtn.addEventListener("click", () => {
+        syncStateFromDom();
+        if (isLastStep) {
+          handleReviewFlow();
+        } else {
+          currentStepIndex++;
+          renderFormContent();
+        }
+      });
+
+      nav.append(prevBtn, nextBtn);
+      wizardContainer.append(header, dotsContainer, card, nav);
+      formContentContainer.append(wizardContainer);
+      actions.append(closeButton);
+    }
+  };
+
+  wizardModeBtn.addEventListener("click", () => {
+    syncStateFromDom();
+    viewMode = "wizard";
+    renderFormContent();
   });
 
-  closeButton.addEventListener("click", () => root.remove());
+  allFieldsModeBtn.addEventListener("click", () => {
+    syncStateFromDom();
+    viewMode = "all";
+    renderFormContent();
+  });
+
+  closeButton.addEventListener("click", () => {
+    highlightTargetElement("");
+    root.remove();
+  });
+
+  renderFormContent();
 }
 
 void injectOverlay();
+

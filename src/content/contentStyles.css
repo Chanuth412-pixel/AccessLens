@@ -210,3 +210,157 @@
 .accesslens-result-error {
   color: #b42318;
 }
+
+/* Mode Switcher */
+.accesslens-mode-switcher {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 4px;
+  margin: 12px 0 16px;
+}
+
+.accesslens-mode-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.accesslens-mode-btn:hover {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.accesslens-mode-btn.active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 700;
+}
+
+/* Wizard Mode */
+.accesslens-wizard-container {
+  display: grid;
+  gap: 16px;
+}
+
+.accesslens-wizard-header {
+  display: grid;
+  gap: 6px;
+}
+
+.accesslens-wizard-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.accesslens-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.accesslens-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  border-radius: 999px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.accesslens-wizard-card {
+  background: #f8fafc;
+  border: 2px solid #2563eb;
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+}
+
+.accesslens-wizard-card .accesslens-field {
+  font-size: 15px;
+  gap: 8px;
+}
+
+.accesslens-wizard-card .accesslens-field input,
+.accesslens-wizard-card .accesslens-field textarea,
+.accesslens-wizard-card .accesslens-field select {
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #94a3b8;
+}
+
+.accesslens-wizard-card .accesslens-field input:focus,
+.accesslens-wizard-card .accesslens-field textarea:focus,
+.accesslens-wizard-card .accesslens-field select:focus {
+  border-color: #1d4ed8;
+  outline: 4px solid rgba(29, 78, 216, 0.25);
+}
+
+.accesslens-wizard-hint {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.accesslens-step-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.accesslens-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.accesslens-dot.active {
+  background: #1d4ed8;
+  transform: scale(1.3);
+}
+
+.accesslens-dot.completed {
+  background: #10b981;
+}
+
+.accesslens-wizard-nav {
+  display: flex;
+  gap: 10px;
+}
+
+.accesslens-wizard-nav button {
+  min-height: 44px;
+  font-size: 15px;
+}
+
