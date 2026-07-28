@@ -7,7 +7,7 @@
     "default_title": "AccessLens",
     "default_popup": "index.html"
   },
-  "permissions": [],
+  "permissions": ["storage"],
   "host_permissions": ["http://localhost:4000/*"],
   "background": {
     "service_worker": "assets/background.js"

@@ -7,6 +7,7 @@ const lowConfidenceThreshold = 0.7;
 
 type TemplateSource = "approved" | "ai" | "database_draft";
 type ViewMode = "all" | "wizard";
+type Language = "en" | "si";
 
 type ResolvedTemplate = {
   template: AccessLensTemplate;
@@ -52,6 +53,80 @@ function escapeCssIdentifier(value: string) {
 
 function escapeAttributeValue(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+const uiText = {
+  en: {
+    allFieldsView: "All Fields View",
+    back: "Back",
+    close: "Close",
+    completed: "Completed",
+    confirmAndFill: "Confirm and Fill Original Form",
+    fillSuccess: "Fields were filled. Review the original website form before submitting it yourself.",
+    fillWarning: "Some fields need manual attention. The original form was not submitted.",
+    hint: "Enter your details clearly as shown on official documents.",
+    next: "Next",
+    notEntered: "Not entered",
+    pleaseEnter: "Please enter",
+    reviewDetails: "Review Details",
+    reviewDetailsHeading: "Review details",
+    reviewMessage: "Review the details and mappings before confirming.",
+    separateWindow: "Separate window",
+    separateWindowError: "Could not open the separate window.",
+    stepByStepWizard: "Step-by-Step Wizard",
+    temporaryAiTemplate: "Temporary AI template",
+    temporaryAiTemplateNotice: "Review mappings before filling."
+  },
+  si: {
+    allFieldsView: "සියලු ක්ෂේත්‍ර",
+    back: "ආපසු",
+    close: "වසන්න",
+    completed: "සම්පූර්ණයි",
+    confirmAndFill: "තහවුරු කර මුල් පෝරමය පුරවන්න",
+    fillSuccess: "ක්ෂේත්‍ර පුරවා ඇත. යැවීමට පෙර මුල් පෝරමය පරීක්ෂා කරන්න.",
+    fillWarning: "ක්ෂේත්‍ර කිහිපයක් අතින් පරීක්ෂා කළ යුතුය. මුල් පෝරමය යවා නැත.",
+    hint: "නිල ලේඛනවල පරිදි තොරතුරු පැහැදිලිව ඇතුළත් කරන්න.",
+    next: "ඊළඟ",
+    notEntered: "ඇතුළත් කර නැත",
+    pleaseEnter: "කරුණාකර ඇතුළත් කරන්න",
+    reviewDetails: "විස්තර පරීක්ෂා කරන්න",
+    reviewDetailsHeading: "විස්තර පරීක්ෂා කරන්න",
+    reviewMessage: "තහවුරු කිරීමට පෙර විස්තර සහ ගැළපීම් පරීක්ෂා කරන්න.",
+    separateWindow: "වෙනම කවුළුව",
+    separateWindowError: "වෙනම කවුළුව විවෘත කළ නොහැක.",
+    stepByStepWizard: "පියවරෙන් පියවර",
+    temporaryAiTemplate: "තාවකාලික AI ආකෘතිය",
+    temporaryAiTemplateNotice: "පිරවීමට පෙර ගැළපීම් පරීක්ෂා කරන්න."
+  }
+} satisfies Record<Language, Record<string, string>>;
+
+const sinhalaFieldLabels: Record<string, string> = {
+  address: "ලිපිනය",
+  email: "ඊමේල්",
+  "email address": "ඊමේල්",
+  "full name": "සම්පූර්ණ නම",
+  name: "නම",
+  nic: "ජාතික හැඳුනුම්පත් අංකය",
+  "national identity card": "ජාතික හැඳුනුම්පත් අංකය",
+  "phone no.": "දුරකථන අංකය",
+  "phone no": "දුරකථන අංකය",
+  "phone number": "දුරකථන අංකය"
+};
+
+function t(language: Language, key: keyof typeof uiText.en) {
+  return uiText[language][key];
+}
+
+function translateFieldLabel(label: string, language: Language) {
+  if (language === "en") {
+    return label;
+  }
+
+  return sinhalaFieldLabels[normalizeText(label).toLowerCase()] ?? label;
 }
 
 function isUniqueSelector(selector: string) {
@@ -228,9 +303,25 @@ function buildDomSnapshot() {
 declare const chrome: {
   runtime?: {
     lastError?: { message?: string };
+    onMessage?: {
+      addListener: (
+        callback: (
+          message: { type: string; values?: Record<string, string> },
+          sender: unknown,
+          sendResponse: (response: unknown) => void
+        ) => boolean | void
+      ) => void;
+    };
     sendMessage: (
-      message: { type: string; url: string; method?: string; headers?: Record<string, string>; body?: unknown },
-      callback: (response: { ok: boolean; status: number; data?: unknown; error?: string } | undefined) => void
+      message: {
+        type: string;
+        url?: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: unknown;
+        session?: unknown;
+      },
+      callback: (response: { ok?: boolean; status?: number; data?: unknown; error?: string } | undefined) => void
     ) => void;
   };
 };
@@ -250,7 +341,12 @@ async function apiFetch(
               if (runtime.lastError || !res) {
                 resolve({ ok: false, status: 0, error: runtime.lastError?.message || "No response" });
               } else {
-                resolve(res);
+                resolve({
+                  ok: Boolean(res.ok),
+                  status: res.status ?? 0,
+                  data: res.data,
+                  error: res.error
+                });
               }
             }
           );
@@ -404,13 +500,14 @@ async function resolveTemplateForCurrentPage(): Promise<ResolvedTemplate> {
   };
 }
 
-function createFieldControl(field: AccessLensField) {
+function createFieldControl(field: AccessLensField, language: Language) {
   const wrapper = document.createElement("label");
   wrapper.className = "accesslens-field";
   wrapper.htmlFor = field.id;
 
   const labelText = document.createElement("span");
-  labelText.textContent = field.required ? `${field.label} *` : field.label;
+  const fieldLabel = translateFieldLabel(field.label, language);
+  labelText.textContent = field.required ? `${fieldLabel} *` : fieldLabel;
 
   let input: FormControl;
 
@@ -418,7 +515,7 @@ function createFieldControl(field: AccessLensField) {
     const select = document.createElement("select");
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = `Select ${field.label}`;
+    placeholder.textContent = language === "si" ? `${fieldLabel} තෝරන්න` : `Select ${fieldLabel}`;
     select.append(placeholder);
 
     for (const optionLabel of field.options ?? []) {
@@ -457,12 +554,12 @@ function getOverlayValues(panel: HTMLElement, fields: AccessLensField[]) {
   }, {});
 }
 
-function validateValues(values: Record<string, string>, fields: AccessLensField[]) {
+function validateValues(values: Record<string, string>, fields: AccessLensField[], language: Language) {
   const missingFields = fields
     .filter((field) => field.required && !values[field.id]?.trim())
-    .map((field) => field.label);
+    .map((field) => translateFieldLabel(field.label, language));
 
-  return missingFields.length === 0 ? "" : `Please enter: ${missingFields.join(", ")}.`;
+  return missingFields.length === 0 ? "" : `${t(language, "pleaseEnter")}: ${missingFields.join(", ")}.`;
 }
 
 function setNativeValue(element: FormControl, value: string) {
@@ -581,12 +678,12 @@ function highlightTargetElement(selector: string) {
   }
 }
 
-function createReviewDetails(values: Record<string, string>, fields: AccessLensField[]) {
+function createReviewDetails(values: Record<string, string>, fields: AccessLensField[], language: Language) {
   const wrapper = document.createElement("div");
   wrapper.className = "accesslens-review";
 
   const heading = document.createElement("h3");
-  heading.textContent = "Review details";
+  heading.textContent = t(language, "reviewDetailsHeading");
   wrapper.append(heading);
 
   for (const field of fields) {
@@ -594,10 +691,10 @@ function createReviewDetails(values: Record<string, string>, fields: AccessLensF
     row.className = "accesslens-review-row";
 
     const label = document.createElement("strong");
-    label.textContent = field.label;
+    label.textContent = translateFieldLabel(field.label, language);
 
     const value = document.createElement("span");
-    value.textContent = values[field.id] || "Not entered";
+    value.textContent = values[field.id] || t(language, "notEntered");
 
     row.append(label, value);
     wrapper.append(row);
@@ -663,6 +760,7 @@ async function injectOverlay() {
   const isRuntimeAiTemplate = source !== "approved";
 
   let viewMode: ViewMode = "wizard";
+  let language: Language = "en";
   let currentStepIndex = 0;
   const formValuesState: Record<string, string> = {};
 
@@ -670,22 +768,42 @@ async function injectOverlay() {
   panel.className = "accesslens-panel";
   panel.setAttribute("aria-label", "AccessLens form overlay");
 
+  const titlebar = document.createElement("div");
+  titlebar.className = "accesslens-titlebar";
+
   const title = document.createElement("h2");
   title.textContent = "AccessLens";
+
+  titlebar.append(title);
+
+  const languageSwitcher = document.createElement("div");
+  languageSwitcher.className = "accesslens-language-switcher";
+  languageSwitcher.setAttribute("aria-label", "Language selector");
+
+  const englishButton = document.createElement("button");
+  englishButton.type = "button";
+  englishButton.className = "accesslens-language-btn active";
+  englishButton.textContent = "English";
+
+  const sinhalaButton = document.createElement("button");
+  sinhalaButton.type = "button";
+  sinhalaButton.className = "accesslens-language-btn";
+  sinhalaButton.textContent = "සිංහල";
+
+  languageSwitcher.append(englishButton, sinhalaButton);
 
   const description = document.createElement("div");
   description.className = isRuntimeAiTemplate
     ? "accesslens-description accesslens-ai-draft"
     : "accesslens-description";
 
+  let draftTitle: HTMLElement | null = null;
+  let draftNotice: HTMLElement | null = null;
+
   if (isRuntimeAiTemplate) {
-    const draftTitle = document.createElement("strong");
-    draftTitle.textContent = "AI-generated temporary template";
-    const draftNotice = document.createElement("p");
-    draftNotice.textContent = "This website does not have an approved AccessLens template yet.";
-    const draftReview = document.createElement("p");
-    draftReview.textContent = "Please review all mappings carefully before filling the original form.";
-    description.append(draftTitle, draftNotice, draftReview);
+    draftTitle = document.createElement("strong");
+    draftNotice = document.createElement("p");
+    description.append(draftTitle, draftNotice);
   } else {
     description.textContent = template.templateName;
   }
@@ -696,12 +814,12 @@ async function injectOverlay() {
   const wizardModeBtn = document.createElement("button");
   wizardModeBtn.type = "button";
   wizardModeBtn.className = `accesslens-mode-btn ${(viewMode as ViewMode) === "wizard" ? "active" : ""}`;
-  wizardModeBtn.textContent = "🧙‍♂️ Step-by-Step Wizard";
+  wizardModeBtn.textContent = "Step-by-Step Wizard";
 
   const allFieldsModeBtn = document.createElement("button");
   allFieldsModeBtn.type = "button";
   allFieldsModeBtn.className = `accesslens-mode-btn ${(viewMode as ViewMode) === "all" ? "active" : ""}`;
-  allFieldsModeBtn.textContent = "📋 All Fields View";
+  allFieldsModeBtn.textContent = "All Fields View";
 
   modeSwitcher.append(wizardModeBtn, allFieldsModeBtn);
 
@@ -728,11 +846,68 @@ async function injectOverlay() {
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "accesslens-secondary-button";
-  closeButton.textContent = "Close";
+
+  const separateWindowButton = document.createElement("button");
+  separateWindowButton.type = "button";
+  separateWindowButton.className = "accesslens-secondary-button accesslens-window-button";
 
   form.append(formContentContainer, actions, reviewContainer, resultContainer);
-  panel.append(title, description, modeSwitcher, form, message);
+  panel.append(titlebar, languageSwitcher, description, modeSwitcher, form, message);
   shadowRoot.append(panel);
+
+  const renderStaticText = () => {
+    panel.lang = language === "si" ? "si" : "en";
+    englishButton.className = `accesslens-language-btn ${language === "en" ? "active" : ""}`;
+    sinhalaButton.className = `accesslens-language-btn ${language === "si" ? "active" : ""}`;
+    wizardModeBtn.textContent = t(language, "stepByStepWizard");
+    allFieldsModeBtn.textContent = t(language, "allFieldsView");
+    closeButton.textContent = t(language, "close");
+    separateWindowButton.textContent = t(language, "separateWindow");
+
+    if (draftTitle && draftNotice) {
+      draftTitle.textContent = t(language, "temporaryAiTemplate");
+      draftNotice.textContent = t(language, "temporaryAiTemplateNotice");
+    }
+  };
+
+  const movePanelTo = (left: number, top: number) => {
+    const panelRect = panel.getBoundingClientRect();
+    const maxLeft = Math.max(16, window.innerWidth - panelRect.width - 16);
+    const maxTop = Math.max(16, window.innerHeight - panelRect.height - 16);
+    panel.style.left = `${clamp(left, 16, maxLeft)}px`;
+    panel.style.top = `${clamp(top, 16, maxTop)}px`;
+    panel.style.right = "auto";
+    panel.classList.add("accesslens-detached");
+  };
+
+  titlebar.addEventListener("pointerdown", (event) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button")) {
+      return;
+    }
+
+    const panelRect = panel.getBoundingClientRect();
+    const offsetX = event.clientX - panelRect.left;
+    const offsetY = event.clientY - panelRect.top;
+    panel.classList.add("accesslens-dragging");
+    titlebar.setPointerCapture(event.pointerId);
+    movePanelTo(panelRect.left, panelRect.top);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      movePanelTo(moveEvent.clientX - offsetX, moveEvent.clientY - offsetY);
+    };
+
+    const handlePointerUp = () => {
+      panel.classList.remove("accesslens-dragging");
+      titlebar.removeEventListener("pointermove", handlePointerMove);
+      titlebar.removeEventListener("pointerup", handlePointerUp);
+      titlebar.removeEventListener("pointercancel", handlePointerUp);
+    };
+
+    titlebar.addEventListener("pointermove", handlePointerMove);
+    titlebar.addEventListener("pointerup", handlePointerUp);
+    titlebar.addEventListener("pointercancel", handlePointerUp);
+  });
 
   const syncStateFromDom = () => {
     fields.forEach((field) => {
@@ -754,7 +929,7 @@ async function injectOverlay() {
 
   const handleReviewFlow = () => {
     syncStateFromDom();
-    const validationError = validateValues(formValuesState, fields);
+    const validationError = validateValues(formValuesState, fields, language);
     message.className = "accesslens-message";
     resultContainer.replaceChildren();
 
@@ -767,11 +942,11 @@ async function injectOverlay() {
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
     confirmButton.className = "accesslens-primary-button";
-    confirmButton.textContent = "Confirm and Fill Original Form";
+    confirmButton.textContent = t(language, "confirmAndFill");
 
     confirmButton.addEventListener("click", () => {
       syncStateFromDom();
-      const latestValidationError = validateValues(formValuesState, fields);
+      const latestValidationError = validateValues(formValuesState, fields, language);
       message.className = "accesslens-message";
       resultContainer.replaceChildren();
 
@@ -785,17 +960,16 @@ async function injectOverlay() {
       const hasErrors = results.some((result) => !result.ok);
       resultContainer.append(createResultList(results));
       message.classList.add(hasErrors ? "accesslens-message-error" : "accesslens-message-success");
-      message.textContent = hasErrors
-        ? "Some fields need manual attention. The original form was not submitted."
-        : "Fields were filled. Review the original website form before submitting it yourself.";
+      message.textContent = hasErrors ? t(language, "fillWarning") : t(language, "fillSuccess");
     });
 
-    reviewContainer.replaceChildren(createReviewDetails(formValuesState, fields), confirmButton);
+    reviewContainer.replaceChildren(createReviewDetails(formValuesState, fields, language), confirmButton);
     reviewContainer.hidden = false;
-    message.textContent = "Review the details and mappings before confirming.";
+    message.textContent = t(language, "reviewMessage");
   };
 
   const renderFormContent = () => {
+    renderStaticText();
     reviewContainer.hidden = true;
     reviewContainer.replaceChildren();
     resultContainer.replaceChildren();
@@ -811,7 +985,7 @@ async function injectOverlay() {
       highlightTargetElement("");
 
       fields.forEach((field) => {
-        const { wrapper, input } = createFieldControl(field);
+        const { wrapper, input } = createFieldControl(field, language);
         if (formValuesState[field.id]) {
           input.value = formValuesState[field.id];
         }
@@ -824,10 +998,10 @@ async function injectOverlay() {
       const reviewButton = document.createElement("button");
       reviewButton.type = "button";
       reviewButton.className = "accesslens-primary-button";
-      reviewButton.textContent = "Review Details";
+      reviewButton.textContent = t(language, "reviewDetails");
       reviewButton.addEventListener("click", handleReviewFlow);
 
-      actions.append(reviewButton, closeButton);
+      actions.append(reviewButton, separateWindowButton, closeButton);
     } else {
       const currentField = fields[currentStepIndex];
 
@@ -844,10 +1018,12 @@ async function injectOverlay() {
       const meta = document.createElement("div");
       meta.className = "accesslens-wizard-meta";
       const stepText = document.createElement("span");
-      stepText.textContent = `Step ${currentStepIndex + 1} of ${fields.length}`;
+      stepText.textContent = language === "si"
+        ? `පියවර ${currentStepIndex + 1}/${fields.length}`
+        : `Step ${currentStepIndex + 1} of ${fields.length}`;
       const percentText = document.createElement("span");
       const progressPercent = Math.round(((currentStepIndex + 1) / fields.length) * 100);
-      percentText.textContent = `${progressPercent}% Completed`;
+      percentText.textContent = `${progressPercent}% ${t(language, "completed")}`;
       meta.append(stepText, percentText);
 
       const progressBar = document.createElement("div");
@@ -867,7 +1043,9 @@ async function injectOverlay() {
         dot.className = `accesslens-dot ${idx === currentStepIndex ? "active" : ""} ${
           formValuesState[fields[idx].id] ? "completed" : ""
         }`;
-        dot.title = `Go to Step ${idx + 1}: ${fields[idx].label}`;
+        dot.title = language === "si"
+          ? `පියවර ${idx + 1}: ${translateFieldLabel(fields[idx].label, language)}`
+          : `Go to Step ${idx + 1}: ${fields[idx].label}`;
         dot.addEventListener("click", () => {
           syncStateFromDom();
           currentStepIndex = idx;
@@ -879,7 +1057,7 @@ async function injectOverlay() {
       const card = document.createElement("div");
       card.className = "accesslens-wizard-card";
 
-      const { wrapper, input } = createFieldControl(currentField);
+      const { wrapper, input } = createFieldControl(currentField, language);
       if (formValuesState[currentField.id]) {
         input.value = formValuesState[currentField.id];
       }
@@ -889,7 +1067,7 @@ async function injectOverlay() {
 
       const hint = document.createElement("p");
       hint.className = "accesslens-wizard-hint";
-      hint.textContent = "💡 Enter your details clearly as shown on official documents.";
+      hint.textContent = t(language, "hint");
 
       card.append(wrapper, hint);
 
@@ -899,7 +1077,7 @@ async function injectOverlay() {
       const prevBtn = document.createElement("button");
       prevBtn.type = "button";
       prevBtn.className = "accesslens-secondary-button";
-      prevBtn.textContent = "⬅️ Back";
+      prevBtn.textContent = t(language, "back");
       prevBtn.disabled = currentStepIndex === 0;
       prevBtn.addEventListener("click", () => {
         syncStateFromDom();
@@ -913,7 +1091,7 @@ async function injectOverlay() {
       const nextBtn = document.createElement("button");
       nextBtn.type = "button";
       nextBtn.className = "accesslens-primary-button";
-      nextBtn.textContent = isLastStep ? "Review Details 🎯" : "Next ➡️";
+      nextBtn.textContent = isLastStep ? t(language, "reviewDetails") : t(language, "next");
 
       nextBtn.addEventListener("click", () => {
         syncStateFromDom();
@@ -928,7 +1106,7 @@ async function injectOverlay() {
       nav.append(prevBtn, nextBtn);
       wizardContainer.append(header, dotsContainer, card, nav);
       formContentContainer.append(wizardContainer);
-      actions.append(closeButton);
+      actions.append(separateWindowButton, closeButton);
     }
   };
 
@@ -944,9 +1122,66 @@ async function injectOverlay() {
     renderFormContent();
   });
 
+  englishButton.addEventListener("click", () => {
+    syncStateFromDom();
+    language = "en";
+    renderFormContent();
+  });
+
+  sinhalaButton.addEventListener("click", () => {
+    syncStateFromDom();
+    language = "si";
+    renderFormContent();
+  });
+
+  separateWindowButton.addEventListener("click", () => {
+    syncStateFromDom();
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      message.className = "accesslens-message accesslens-message-error";
+      message.textContent = t(language, "separateWindowError");
+      return;
+    }
+
+    runtime.sendMessage(
+      {
+        type: "OPEN_ACCESSLENS_WINDOW",
+        session: {
+          templateName: template.templateName,
+          fields,
+          values: formValuesState,
+          language,
+          isRuntimeAiTemplate
+        }
+      },
+      (response) => {
+        if (runtime.lastError || !response?.ok) {
+          message.className = "accesslens-message accesslens-message-error";
+          message.textContent = response?.error || runtime.lastError?.message || t(language, "separateWindowError");
+        }
+      }
+    );
+  });
+
   closeButton.addEventListener("click", () => {
     highlightTargetElement("");
     root.remove();
+  });
+
+  chrome.runtime?.onMessage?.addListener((incomingMessage, _sender, sendResponse) => {
+    if (incomingMessage.type !== "ACCESSLENS_FILL_VALUES" || !incomingMessage.values) {
+      return;
+    }
+
+    const results = fillOriginalForm(incomingMessage.values, fields);
+    const hasErrors = results.some((result) => !result.ok);
+    resultContainer.replaceChildren(createResultList(results));
+    message.className = `accesslens-message ${
+      hasErrors ? "accesslens-message-error" : "accesslens-message-success"
+    }`;
+    message.textContent = hasErrors ? t(language, "fillWarning") : t(language, "fillSuccess");
+    sendResponse({ ok: !hasErrors, results });
   });
 
   renderFormContent();

@@ -10,6 +10,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: "index.html",
+        openPanel: "openPanel.html",
         contentScript: "src/content/contentScript.ts",
         background: "src/background/background.ts"
       },

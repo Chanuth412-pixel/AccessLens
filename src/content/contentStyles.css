@@ -15,22 +15,57 @@
   top: 24px;
   right: 24px;
   z-index: 2147483647;
-  width: min(390px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow-y: auto;
-  padding: 18px;
-  border: 1px solid #d6dde8;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.24);
+  padding: 20px 22px;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(241, 247, 255, 0.78)),
+    rgba(255, 255, 255, 0.76);
+  box-shadow:
+    0 24px 70px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
   color: #172033;
+  backdrop-filter: blur(18px) saturate(1.18);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.accesslens-panel.accesslens-detached {
+  right: auto;
+  box-shadow:
+    0 30px 80px rgba(15, 23, 42, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.accesslens-panel.accesslens-dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+
+.accesslens-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -8px -8px 12px;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.accesslens-titlebar:active {
+  cursor: grabbing;
 }
 
 .accesslens-panel h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1.2;
   font-weight: 700;
+  letter-spacing: 0;
 }
 
 .accesslens-description {
@@ -40,7 +75,50 @@
   line-height: 1.4;
 }
 
+.accesslens-language-switcher {
+  display: inline-flex;
+  width: fit-content;
+  gap: 3px;
+  margin: -4px 0 12px;
+  padding: 3px;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.5);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.accesslens-language-btn {
+  min-height: 30px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 13px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.accesslens-language-btn:hover {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.accesslens-language-btn.active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d4ed8;
+  box-shadow:
+    0 6px 14px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
 .accesslens-form {
+  display: grid;
+  gap: 12px;
+}
+
+.accesslens-form-content {
   display: grid;
   gap: 12px;
 }
@@ -48,8 +126,8 @@
 .accesslens-field {
   display: grid;
   gap: 6px;
-  color: #263447;
-  font-size: 13px;
+  color: #26364f;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -57,14 +135,17 @@
 .accesslens-field textarea,
 .accesslens-field select {
   width: 100%;
-  border: 1px solid #b9c4d3;
-  border-radius: 6px;
-  padding: 9px 10px;
-  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.78);
+  border-radius: 10px;
+  padding: 12px 13px;
+  background: rgba(255, 255, 255, 0.76);
   color: #172033;
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
+  box-shadow:
+    inset 0 1px 1px rgba(15, 23, 42, 0.04),
+    0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .accesslens-field textarea {
@@ -75,46 +156,56 @@
 .accesslens-field input:focus,
 .accesslens-field textarea:focus,
 .accesslens-field select:focus {
-  border-color: #1d4ed8;
-  outline: 3px solid rgba(29, 78, 216, 0.18);
+  border-color: #2563eb;
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .accesslens-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   margin-top: 4px;
 }
 
 .accesslens-primary-button,
 .accesslens-secondary-button {
-  min-height: 40px;
-  border-radius: 6px;
-  padding: 0 12px;
+  min-height: 46px;
+  border-radius: 10px;
+  padding: 0 16px;
   font: inherit;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
 .accesslens-primary-button {
   flex: 1;
-  border: 1px solid #1d4ed8;
-  background: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.84);
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
   color: #ffffff;
+  box-shadow: 0 12px 24px rgba(29, 78, 216, 0.24);
 }
 
 .accesslens-secondary-button {
-  border: 1px solid #c7d0de;
-  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.58);
+  background: rgba(255, 255, 255, 0.58);
   color: #263447;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66);
 }
 
 .accesslens-primary-button:hover {
-  background: #1e40af;
+  background: linear-gradient(180deg, #1d4ed8, #1e40af);
+  transform: translateY(-1px);
 }
 
 .accesslens-secondary-button:hover {
-  background: #f5f7fb;
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(96, 165, 250, 0.64);
 }
 
 .accesslens-message {
@@ -133,21 +224,25 @@
 }
 
 .accesslens-ai-draft {
-  border-left: 3px solid #b54708;
-  padding: 8px 10px;
-  background: #fff8eb;
-  color: #7a2e0e;
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  border-left: 4px solid #c2410c;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 247, 237, 0.72);
+  color: #7c2d12;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
 .accesslens-ai-draft strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #7a2e0e;
+  display: inline;
+  margin-right: 8px;
+  color: #7c2d12;
   font-size: 14px;
 }
 
 .accesslens-ai-draft p {
-  margin: 4px 0 0;
+  display: inline;
+  margin: 0;
 }
 
 .accesslens-review {
@@ -214,23 +309,25 @@
 /* Mode Switcher */
 .accesslens-mode-switcher {
   display: flex;
-  background: #f1f5f9;
-  border-radius: 8px;
-  padding: 3px;
+  background: rgba(226, 232, 240, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 12px;
+  padding: 4px;
   gap: 4px;
   margin: 12px 0 16px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .accesslens-mode-btn {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   color: #475569;
-  border-radius: 6px;
+  border-radius: 9px;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -241,13 +338,15 @@
 
 .accesslens-mode-btn:hover {
   color: #1e293b;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .accesslens-mode-btn.active {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.88);
   color: #1d4ed8;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
   font-weight: 700;
 }
 
@@ -268,32 +367,34 @@
   align-items: center;
   font-size: 13px;
   font-weight: 700;
-  color: #1d4ed8;
+  color: #1f4fd0;
 }
 
 .accesslens-progress-bar {
   width: 100%;
   height: 8px;
-  background: #e2e8f0;
+  background: rgba(203, 213, 225, 0.66);
   border-radius: 999px;
   overflow: hidden;
 }
 
 .accesslens-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  background: linear-gradient(90deg, #2563eb, #14b8a6);
   border-radius: 999px;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .accesslens-wizard-card {
-  background: #f8fafc;
-  border: 2px solid #2563eb;
-  border-radius: 10px;
-  padding: 16px;
+  background: rgba(248, 250, 252, 0.62);
+  border: 1px solid rgba(37, 99, 235, 0.46);
+  border-radius: 14px;
+  padding: 20px;
   display: grid;
-  gap: 12px;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  gap: 14px;
+  box-shadow:
+    0 16px 35px rgba(37, 99, 235, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .accesslens-wizard-card .accesslens-field {
@@ -318,13 +419,10 @@
 }
 
 .accesslens-wizard-hint {
-  font-size: 12.5px;
-  color: #64748b;
+  font-size: 13px;
+  color: #526071;
   margin: 0;
   line-height: 1.4;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .accesslens-step-dots {
@@ -338,7 +436,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #cbd5e1;
+  background: rgba(203, 213, 225, 0.88);
   border: none;
   cursor: pointer;
   padding: 0;
@@ -346,12 +444,12 @@
 }
 
 .accesslens-dot.active {
-  background: #1d4ed8;
+  background: #2563eb;
   transform: scale(1.3);
 }
 
 .accesslens-dot.completed {
-  background: #10b981;
+  background: #14b8a6;
 }
 
 .accesslens-wizard-nav {
