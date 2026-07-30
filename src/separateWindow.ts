@@ -71,30 +71,29 @@ const windowStyles = `
   body {
     min-height: 100%;
     margin: 0;
-    background: linear-gradient(145deg, #eef6ff, #f8fbff);
-    color: #172033;
+    background: #f8fafc;
+    color: #0f172a;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
 
   #accesslens-window-root {
     min-height: 100vh;
     padding: 16px;
+    display: flex;
+    justify-content: center;
   }
 
   .accesslens-panel {
     width: 100%;
-    min-height: calc(100vh - 32px);
-    padding: 20px 22px;
-    border: 1px solid rgba(203, 213, 225, 0.72);
-    border-radius: 14px;
-    background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(241, 247, 255, 0.78)),
-      rgba(255, 255, 255, 0.76);
+    max-width: 440px;
+    min-height: fit-content;
+    padding: 20px;
+    border: 2px solid #2563eb;
+    border-radius: 16px;
+    background: #ffffff;
     box-shadow:
-      0 24px 70px rgba(15, 23, 42, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(18px) saturate(1.18);
-    -webkit-backdrop-filter: blur(18px) saturate(1.18);
+      0 20px 50px -10px rgba(15, 23, 42, 0.2),
+      0 0 0 1px rgba(37, 99, 235, 0.25);
   }
 
   .accesslens-titlebar {
@@ -102,68 +101,71 @@ const windowStyles = `
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin: -8px -8px 12px;
-    padding: 8px;
-    border-radius: 10px;
+    margin: -4px -4px 12px;
+    padding: 4px;
+    border-radius: 8px;
   }
 
   .accesslens-panel h2 {
     margin: 0;
-    font-size: 24px;
-    line-height: 1.2;
+    font-size: 20px;
+    line-height: 1.25;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
+    color: #0f172a;
   }
 
   .accesslens-language-switcher {
     display: inline-flex;
     width: fit-content;
-    gap: 3px;
-    margin: -4px 0 12px;
+    gap: 2px;
+    margin: -2px 0 12px;
     padding: 3px;
-    border: 1px solid rgba(203, 213, 225, 0.72);
+    border: 1px solid #e2e8f0;
     border-radius: 999px;
-    background: rgba(226, 232, 240, 0.5);
-    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+    background: #f8fafc;
   }
 
   .accesslens-language-btn {
-    min-height: 30px;
+    min-height: 28px;
     border: none;
     border-radius: 999px;
-    padding: 0 13px;
+    padding: 0 12px;
     background: transparent;
-    color: #475569;
+    color: #64748b;
     font: inherit;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .accesslens-language-btn:hover {
+    color: #1e293b;
+    background: #f1f5f9;
   }
 
   .accesslens-language-btn.active {
-    background: rgba(255, 255, 255, 0.9);
-    color: #1d4ed8;
-    box-shadow:
-      0 6px 14px rgba(15, 23, 42, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    background: #ffffff;
+    color: #2563eb;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
   }
 
   .accesslens-description,
   .accesslens-window-intro {
-    margin: 8px 0 16px;
-    color: #526071;
-    font-size: 14px;
-    line-height: 1.4;
+    margin: 8px 0 14px;
+    color: #64748b;
+    font-size: 13.5px;
+    line-height: 1.45;
   }
 
   .accesslens-ai-draft {
-    border: 1px solid rgba(251, 191, 36, 0.42);
-    border-left: 4px solid #c2410c;
-    border-radius: 10px;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
     padding: 10px 12px;
-    background: rgba(255, 247, 237, 0.72);
-    color: #7c2d12;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+    background: #fffbeb;
+    color: #92400e;
   }
 
   .accesslens-ai-draft strong,
@@ -174,6 +176,8 @@ const windowStyles = `
 
   .accesslens-ai-draft strong {
     margin-right: 8px;
+    color: #78350f;
+    font-size: 13.5px;
   }
 
   .accesslens-form,
@@ -192,8 +196,8 @@ const windowStyles = `
 
   .accesslens-field {
     gap: 6px;
-    color: #26364f;
-    font-size: 14px;
+    color: #334155;
+    font-size: 13.5px;
     font-weight: 600;
   }
 
@@ -201,18 +205,19 @@ const windowStyles = `
   .accesslens-field textarea,
   .accesslens-field select {
     width: 100%;
-    border: 1px solid rgba(148, 163, 184, 0.78);
-    border-radius: 10px;
-    padding: 12px 13px;
-    background: rgba(255, 255, 255, 0.76);
-    color: #172033;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #ffffff;
+    color: #0f172a;
     font: inherit;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 400;
+    transition: all 0.15s ease;
   }
 
   .accesslens-field textarea {
-    min-height: 86px;
+    min-height: 80px;
     resize: vertical;
   }
 
@@ -220,54 +225,66 @@ const windowStyles = `
   .accesslens-field textarea:focus,
   .accesslens-field select:focus {
     border-color: #2563eb;
-    outline: 3px solid rgba(37, 99, 235, 0.18);
-    background: rgba(255, 255, 255, 0.94);
+    outline: 3px solid rgba(37, 99, 235, 0.15);
+    background: #ffffff;
   }
 
   .accesslens-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     margin-top: 4px;
   }
 
   .accesslens-primary-button,
   .accesslens-secondary-button {
-    min-height: 46px;
-    border-radius: 10px;
+    min-height: 40px;
+    border-radius: 8px;
     padding: 0 16px;
     font: inherit;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
+    transition: all 0.15s ease;
   }
 
   .accesslens-primary-button {
     flex: 1;
-    border: 1px solid rgba(37, 99, 235, 0.84);
-    background: linear-gradient(180deg, #2563eb, #1d4ed8);
+    border: 1px solid #2563eb;
+    background: #2563eb;
     color: #ffffff;
-    box-shadow: 0 12px 24px rgba(29, 78, 216, 0.24);
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.18);
   }
 
   .accesslens-secondary-button {
-    border: 1px solid rgba(148, 163, 184, 0.58);
-    background: rgba(255, 255, 255, 0.58);
-    color: #263447;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+  }
+
+  .accesslens-primary-button:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+  }
+
+  .accesslens-secondary-button:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #0f172a;
   }
 
   .accesslens-message {
     min-height: 20px;
-    margin: 12px 0 0;
+    margin: 10px 0 0;
     font-size: 13px;
     line-height: 1.4;
   }
 
   .accesslens-message-error {
-    color: #b42318;
+    color: #dc2626;
   }
 
   .accesslens-message-success {
-    color: #067647;
+    color: #16a34a;
   }
 `;
 

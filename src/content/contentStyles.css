@@ -15,28 +15,27 @@
   top: 24px;
   right: 24px;
   z-index: 2147483647;
-  width: min(560px, calc(100vw - 32px));
+  width: min(440px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow-y: auto;
-  padding: 20px 22px;
-  border: 1px solid rgba(203, 213, 225, 0.72);
-  border-radius: 14px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(241, 247, 255, 0.78)),
-    rgba(255, 255, 255, 0.76);
+  padding: 20px;
+  border: 2px solid #2563eb;
+  border-radius: 16px;
+  background: #ffffff;
   box-shadow:
-    0 24px 70px rgba(15, 23, 42, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  color: #172033;
-  backdrop-filter: blur(18px) saturate(1.18);
-  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+    0 24px 60px -10px rgba(15, 23, 42, 0.3),
+    0 0 0 1px rgba(37, 99, 235, 0.25);
+  color: #0f172a;
+  backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
 }
 
 .accesslens-panel.accesslens-detached {
   right: auto;
+  border-color: #1d4ed8;
   box-shadow:
-    0 30px 80px rgba(15, 23, 42, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    0 28px 70px -10px rgba(15, 23, 42, 0.35),
+    0 0 0 1px rgba(29, 78, 216, 0.3);
 }
 
 .accesslens-panel.accesslens-dragging {
@@ -44,14 +43,18 @@
   cursor: grabbing;
 }
 
+.accesslens-panel-collapsed {
+  padding-bottom: 12px;
+}
+
 .accesslens-titlebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: -8px -8px 12px;
-  padding: 8px;
-  border-radius: 10px;
+  margin: -4px -4px 8px;
+  padding: 4px;
+  border-radius: 8px;
   cursor: grab;
   touch-action: none;
 }
@@ -60,57 +63,253 @@
   cursor: grabbing;
 }
 
+.accesslens-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accesslens-logo-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
 .accesslens-panel h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 19px;
   line-height: 1.2;
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.accesslens-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.accesslens-badge-approved {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.accesslens-badge-ai {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.accesslens-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.accesslens-drag-grip {
+  color: #94a3b8;
+  font-size: 14px;
+  padding: 0 4px;
+  cursor: grab;
+}
+
+.accesslens-icon-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.accesslens-icon-button:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 .accesslens-description {
-  margin: 8px 0 16px;
-  color: #526071;
-  font-size: 14px;
-  line-height: 1.4;
+  margin: 8px 0 14px;
+  color: #64748b;
+  font-size: 13.5px;
+  line-height: 1.45;
 }
 
 .accesslens-language-switcher {
   display: inline-flex;
   width: fit-content;
-  gap: 3px;
-  margin: -4px 0 12px;
+  gap: 2px;
+  margin: -2px 0 12px;
   padding: 3px;
-  border: 1px solid rgba(203, 213, 225, 0.72);
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
-  background: rgba(226, 232, 240, 0.5);
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+  background: #f8fafc;
 }
 
 .accesslens-language-btn {
-  min-height: 30px;
+  min-height: 28px;
   border: none;
   border-radius: 999px;
-  padding: 0 13px;
+  padding: 0 12px;
   background: transparent;
-  color: #475569;
+  color: #64748b;
   font: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .accesslens-language-btn:hover {
   color: #1e293b;
-  background: rgba(255, 255, 255, 0.54);
+  background: #f1f5f9;
 }
 
 .accesslens-language-btn.active {
-  background: rgba(255, 255, 255, 0.9);
-  color: #1d4ed8;
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+/* Dark Mode Support */
+.accesslens-panel.accesslens-dark {
+  background: #0f172a;
+  color: #f8fafc;
+  border-color: #3b82f6;
   box-shadow:
-    0 6px 14px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    0 24px 60px -10px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
+.accesslens-panel.accesslens-dark h2 {
+  color: #ffffff;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-icon-button {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-icon-button:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-description {
+  color: #94a3b8;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-language-switcher {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-language-btn {
+  color: #94a3b8;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-language-btn:hover {
+  color: #f8fafc;
+  background: #334155;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-language-btn.active {
+  background: #0f172a;
+  color: #60a5fa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.accesslens-panel.accesslens-dark .accesslens-mode-switcher {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-mode-btn {
+  color: #94a3b8;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-mode-btn.active {
+  background: #0f172a;
+  color: #60a5fa;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-field {
+  color: #cbd5e1;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-field input,
+.accesslens-panel.accesslens-dark .accesslens-field textarea,
+.accesslens-panel.accesslens-dark .accesslens-field select {
+  background: #1e293b;
+  color: #ffffff;
+  border-color: #334155;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-field input:focus,
+.accesslens-panel.accesslens-dark .accesslens-field textarea:focus,
+.accesslens-panel.accesslens-dark .accesslens-field select:focus {
+  border-color: #60a5fa;
+  background: #0f172a;
+  outline-color: rgba(96, 165, 250, 0.2);
+}
+
+.accesslens-panel.accesslens-dark .accesslens-wizard-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-wizard-hint {
+  color: #94a3b8;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-secondary-button {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-secondary-button:hover {
+  background: #334155;
+  border-color: #475569;
+  color: #ffffff;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-review {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-review h3 {
+  color: #f8fafc;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-review-row strong {
+  color: #e2e8f0;
+}
+
+.accesslens-panel.accesslens-dark .accesslens-review-row {
+  color: #94a3b8;
 }
 
 .accesslens-form {
@@ -126,8 +325,8 @@
 .accesslens-field {
   display: grid;
   gap: 6px;
-  color: #26364f;
-  font-size: 14px;
+  color: #334155;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -135,21 +334,19 @@
 .accesslens-field textarea,
 .accesslens-field select {
   width: 100%;
-  border: 1px solid rgba(148, 163, 184, 0.78);
-  border-radius: 10px;
-  padding: 12px 13px;
-  background: rgba(255, 255, 255, 0.76);
-  color: #172033;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #0f172a;
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
-  box-shadow:
-    inset 0 1px 1px rgba(15, 23, 42, 0.04),
-    0 1px 0 rgba(255, 255, 255, 0.65);
+  transition: all 0.15s ease;
 }
 
 .accesslens-field textarea {
-  min-height: 86px;
+  min-height: 80px;
   resize: vertical;
 }
 
@@ -157,87 +354,82 @@
 .accesslens-field textarea:focus,
 .accesslens-field select:focus {
   border-color: #2563eb;
-  outline: 3px solid rgba(37, 99, 235, 0.18);
-  background: rgba(255, 255, 255, 0.94);
+  outline: 3px solid rgba(37, 99, 235, 0.15);
+  background: #ffffff;
 }
 
 .accesslens-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin-top: 4px;
 }
 
 .accesslens-primary-button,
 .accesslens-secondary-button {
-  min-height: 46px;
-  border-radius: 10px;
+  min-height: 40px;
+  border-radius: 8px;
   padding: 0 16px;
   font: inherit;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease,
-    transform 0.18s ease;
+  transition: all 0.15s ease;
 }
 
 .accesslens-primary-button {
   flex: 1;
-  border: 1px solid rgba(37, 99, 235, 0.84);
-  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  border: 1px solid #2563eb;
+  background: #2563eb;
   color: #ffffff;
-  box-shadow: 0 12px 24px rgba(29, 78, 216, 0.24);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.18);
 }
 
 .accesslens-secondary-button {
-  border: 1px solid rgba(148, 163, 184, 0.58);
-  background: rgba(255, 255, 255, 0.58);
-  color: #263447;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66);
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
 }
 
 .accesslens-primary-button:hover {
-  background: linear-gradient(180deg, #1d4ed8, #1e40af);
-  transform: translateY(-1px);
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .accesslens-secondary-button:hover {
-  background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(96, 165, 250, 0.64);
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
 .accesslens-message {
   min-height: 20px;
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   font-size: 13px;
   line-height: 1.4;
 }
 
 .accesslens-message-error {
-  color: #b42318;
+  color: #dc2626;
 }
 
 .accesslens-message-success {
-  color: #067647;
+  color: #16a34a;
 }
 
 .accesslens-ai-draft {
-  border: 1px solid rgba(251, 191, 36, 0.42);
-  border-left: 4px solid #c2410c;
-  border-radius: 10px;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
   padding: 10px 12px;
-  background: rgba(255, 247, 237, 0.72);
-  color: #7c2d12;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .accesslens-ai-draft strong {
   display: inline;
   margin-right: 8px;
-  color: #7c2d12;
-  font-size: 14px;
+  color: #78350f;
+  font-size: 13.5px;
 }
 
 .accesslens-ai-draft p {
@@ -249,30 +441,30 @@
   display: grid;
   gap: 8px;
   margin-top: 4px;
-  padding: 10px;
-  border: 1px solid #d6dde8;
-  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   background: #f8fafc;
 }
 
 .accesslens-review h3 {
   margin: 0;
-  color: #263447;
+  color: #0f172a;
   font-size: 14px;
   line-height: 1.3;
 }
 
 .accesslens-review-row {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  color: #526071;
+  color: #64748b;
   font-size: 12px;
   line-height: 1.35;
 }
 
 .accesslens-review-row strong {
-  color: #263447;
+  color: #334155;
   font-size: 13px;
 }
 
@@ -299,37 +491,36 @@
 }
 
 .accesslens-result-success {
-  color: #067647;
+  color: #16a34a;
 }
 
 .accesslens-result-error {
-  color: #b42318;
+  color: #dc2626;
 }
 
 /* Mode Switcher */
 .accesslens-mode-switcher {
   display: flex;
-  background: rgba(226, 232, 240, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 12px;
-  padding: 4px;
-  gap: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
   margin: 12px 0 16px;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .accesslens-mode-btn {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 10px 12px;
+  padding: 8px 12px;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: #475569;
-  border-radius: 9px;
+  color: #64748b;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -338,22 +529,19 @@
 
 .accesslens-mode-btn:hover {
   color: #1e293b;
-  background: rgba(255, 255, 255, 0.5);
 }
 
 .accesslens-mode-btn.active {
-  background: rgba(255, 255, 255, 0.88);
-  color: #1d4ed8;
-  box-shadow:
-    0 8px 18px rgba(15, 23, 42, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  font-weight: 700;
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  font-weight: 600;
 }
 
 /* Wizard Mode */
 .accesslens-wizard-container {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .accesslens-wizard-header {
@@ -365,62 +553,64 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
-  font-weight: 700;
-  color: #1f4fd0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2563eb;
 }
 
 .accesslens-progress-bar {
   width: 100%;
-  height: 8px;
-  background: rgba(203, 213, 225, 0.66);
+  height: 6px;
+  background: #e2e8f0;
   border-radius: 999px;
   overflow: hidden;
 }
 
 .accesslens-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #14b8a6);
+  background: #2563eb;
   border-radius: 999px;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s ease;
 }
 
 .accesslens-wizard-card {
-  background: rgba(248, 250, 252, 0.62);
-  border: 1px solid rgba(37, 99, 235, 0.46);
-  border-radius: 14px;
-  padding: 20px;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 18px 20px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   box-shadow:
-    0 16px 35px rgba(37, 99, 235, 0.11),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    0 4px 16px -2px rgba(15, 23, 42, 0.05),
+    0 2px 4px -1px rgba(15, 23, 42, 0.03);
 }
 
 .accesslens-wizard-card .accesslens-field {
-  font-size: 15px;
-  gap: 8px;
+  font-size: 14px;
+  gap: 6px;
 }
 
 .accesslens-wizard-card .accesslens-field input,
 .accesslens-wizard-card .accesslens-field textarea,
 .accesslens-wizard-card .accesslens-field select {
-  font-size: 16px;
-  padding: 12px 14px;
+  font-size: 14px;
+  padding: 10px 12px;
   border-radius: 8px;
-  border: 1.5px solid #94a3b8;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
 }
 
 .accesslens-wizard-card .accesslens-field input:focus,
 .accesslens-wizard-card .accesslens-field textarea:focus,
 .accesslens-wizard-card .accesslens-field select:focus {
-  border-color: #1d4ed8;
-  outline: 4px solid rgba(29, 78, 216, 0.25);
+  border-color: #2563eb;
+  background: #ffffff;
+  outline: 3px solid rgba(37, 99, 235, 0.15);
 }
 
 .accesslens-wizard-hint {
-  font-size: 13px;
-  color: #526071;
+  font-size: 12.5px;
+  color: #64748b;
   margin: 0;
   line-height: 1.4;
 }
@@ -429,36 +619,37 @@
   display: flex;
   justify-content: center;
   gap: 6px;
-  margin: 4px 0;
+  margin: 2px 0;
 }
 
 .accesslens-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: rgba(203, 213, 225, 0.88);
+  background: #cbd5e1;
   border: none;
   cursor: pointer;
   padding: 0;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .accesslens-dot.active {
   background: #2563eb;
-  transform: scale(1.3);
+  transform: scale(1.25);
 }
 
 .accesslens-dot.completed {
-  background: #14b8a6;
+  background: #10b981;
 }
 
 .accesslens-wizard-nav {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .accesslens-wizard-nav button {
-  min-height: 44px;
-  font-size: 15px;
+  min-height: 40px;
+  font-size: 14px;
 }
+
 

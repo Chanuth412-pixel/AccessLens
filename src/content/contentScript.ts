@@ -762,6 +762,8 @@ async function injectOverlay() {
   let viewMode: ViewMode = "wizard";
   let language: Language = "en";
   let currentStepIndex = 0;
+  let isDarkMode = false;
+  let isCollapsed = false;
   const formValuesState: Record<string, string> = {};
 
   const panel = document.createElement("section");
@@ -771,10 +773,49 @@ async function injectOverlay() {
   const titlebar = document.createElement("div");
   titlebar.className = "accesslens-titlebar";
 
+  const brandGroup = document.createElement("div");
+  brandGroup.className = "accesslens-brand-group";
+
+  const logoMark = document.createElement("div");
+  logoMark.className = "accesslens-logo-mark";
+  logoMark.textContent = "AL";
+
   const title = document.createElement("h2");
   title.textContent = "AccessLens";
 
-  titlebar.append(title);
+  const statusBadge = document.createElement("span");
+  statusBadge.className = `accesslens-badge ${isRuntimeAiTemplate ? "accesslens-badge-ai" : "accesslens-badge-approved"}`;
+  statusBadge.textContent = isRuntimeAiTemplate ? "AI Mapped" : "Approved";
+
+  brandGroup.append(logoMark, title, statusBadge);
+
+  const headerControls = document.createElement("div");
+  headerControls.className = "accesslens-header-controls";
+
+  const dragGrip = document.createElement("span");
+  dragGrip.className = "accesslens-drag-grip";
+  dragGrip.title = "Drag to reposition";
+  dragGrip.textContent = "⠿";
+
+  const themeToggleBtn = document.createElement("button");
+  themeToggleBtn.type = "button";
+  themeToggleBtn.className = "accesslens-icon-button";
+  themeToggleBtn.title = "Toggle Theme";
+  themeToggleBtn.setAttribute("aria-label", "Toggle Dark/Light Mode");
+  themeToggleBtn.textContent = "🌙";
+
+  const collapseBtn = document.createElement("button");
+  collapseBtn.type = "button";
+  collapseBtn.className = "accesslens-icon-button";
+  collapseBtn.title = "Collapse Panel";
+  collapseBtn.setAttribute("aria-label", "Collapse Panel");
+  collapseBtn.textContent = "−";
+
+  headerControls.append(dragGrip, themeToggleBtn, collapseBtn);
+  titlebar.append(brandGroup, headerControls);
+
+  const panelBody = document.createElement("div");
+  panelBody.className = "accesslens-panel-body";
 
   const languageSwitcher = document.createElement("div");
   languageSwitcher.className = "accesslens-language-switcher";
@@ -852,8 +893,23 @@ async function injectOverlay() {
   separateWindowButton.className = "accesslens-secondary-button accesslens-window-button";
 
   form.append(formContentContainer, actions, reviewContainer, resultContainer);
-  panel.append(titlebar, languageSwitcher, description, modeSwitcher, form, message);
+  panelBody.append(languageSwitcher, description, modeSwitcher, form, message);
+  panel.append(titlebar, panelBody);
   shadowRoot.append(panel);
+
+  themeToggleBtn.addEventListener("click", () => {
+    isDarkMode = !isDarkMode;
+    panel.classList.toggle("accesslens-dark", isDarkMode);
+    themeToggleBtn.textContent = isDarkMode ? "☀️" : "🌙";
+  });
+
+  collapseBtn.addEventListener("click", () => {
+    isCollapsed = !isCollapsed;
+    panelBody.hidden = isCollapsed;
+    panel.classList.toggle("accesslens-panel-collapsed", isCollapsed);
+    collapseBtn.textContent = isCollapsed ? "+" : "−";
+    collapseBtn.title = isCollapsed ? "Expand Panel" : "Collapse Panel";
+  });
 
   const renderStaticText = () => {
     panel.lang = language === "si" ? "si" : "en";
