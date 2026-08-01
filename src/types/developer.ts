@@ -7,7 +7,23 @@ export type DeveloperStats = {
   approvedTemplates: number;
   archivedTemplates: number;
   templateErrors: number;
+  pendingWebsiteRequests: number;
 };
+
+export type WebsiteRequestStatus = "pending" | "in_review" | "fulfilled" | "rejected";
+
+export type WebsiteRequest = {
+  id: string;
+  url: string;
+  base_domain: string;
+  site_name: string;
+  user_note: string | null;
+  status: WebsiteRequestStatus;
+  request_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
 
 export type DeveloperSite = {
   id: string;

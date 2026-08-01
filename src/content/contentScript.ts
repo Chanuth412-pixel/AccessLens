@@ -79,7 +79,12 @@ const uiText = {
     separateWindowError: "Could not open the separate window.",
     stepByStepWizard: "Step-by-Step Wizard",
     temporaryAiTemplate: "Temporary AI template",
-    temporaryAiTemplateNotice: "Review mappings before filling."
+    temporaryAiTemplateNotice: "Review mappings before filling.",
+    requestWebsite: "Request Website Support",
+    requestingWebsite: "Sending Request...",
+    websiteRequestedSuccess: "Website support requested! The developer board has been notified.",
+    requestNotePlaceholder: "Optional note for developers...",
+    unsupportedNotice: "This site is not yet officially registered in AccessLens."
   },
   si: {
     allFieldsView: "සියලු ක්ෂේත්‍ර",
@@ -100,9 +105,15 @@ const uiText = {
     separateWindowError: "වෙනම කවුළුව විවෘත කළ නොහැක.",
     stepByStepWizard: "පියවරෙන් පියවර",
     temporaryAiTemplate: "තාවකාලික AI ආකෘතිය",
-    temporaryAiTemplateNotice: "පිරවීමට පෙර ගැළපීම් පරීක්ෂා කරන්න."
+    temporaryAiTemplateNotice: "පිරවීමට පෙර ගැළපීම් පරීක්ෂා කරන්න.",
+    requestWebsite: "මෙම වෙබ් අඩවිය සඳහා ඉල්ලුම් කරන්න",
+    requestingWebsite: "යවමින් පවතී...",
+    websiteRequestedSuccess: "සහාය ඉල්ලුම් කරන ලදී! සංවර්ධක මණ්ඩලයට දැනුම් දී ඇත.",
+    requestNotePlaceholder: "අමතර සටහනක් ඇතුළත් කරන්න (අත්‍යවශ්‍ය නොවේ)...",
+    unsupportedNotice: "මෙම වෙබ් අඩවිය තවමත් AccessLens හි නිල වශයෙන් ලියාපදිංචි වී නොමැත."
   }
 } satisfies Record<Language, Record<string, string>>;
+
 
 const sinhalaFieldLabels: Record<string, string> = {
   address: "ලිපිනය",
@@ -648,6 +659,97 @@ function createStatusPanel(titleText: string, messageText: string, error = false
   return panel;
 }
 
+function createWebsiteRequestCard(language: Language) {
+  const card = document.createElement("div");
+  card.className = "accesslens-request-card";
+
+  const header = document.createElement("div");
+  header.className = "accesslens-request-header";
+
+  const icon = document.createElement("span");
+  icon.className = "accesslens-request-icon";
+  icon.textContent = "🌐";
+
+  const title = document.createElement("span");
+  title.className = "accesslens-request-title";
+  title.textContent = t(language, "unsupportedNotice");
+
+  header.append(icon, title);
+
+  const body = document.createElement("div");
+  body.className = "accesslens-request-body";
+
+  const noteInput = document.createElement("input");
+  noteInput.type = "text";
+  noteInput.className = "accesslens-request-input";
+  noteInput.placeholder = t(language, "requestNotePlaceholder");
+
+  const requestBtn = document.createElement("button");
+  requestBtn.type = "button";
+  requestBtn.className = "accesslens-request-button";
+  requestBtn.textContent = t(language, "requestWebsite");
+
+  const statusMsg = document.createElement("p");
+  statusMsg.className = "accesslens-request-status";
+
+  void apiFetch(`${backendApiUrl}/requests/check?url=${encodeURIComponent(window.location.href)}`)
+    .then(async (res) => {
+      if (res.ok) {
+        const data = await res.json() as { requested: boolean; request?: { request_count: number; status: string } };
+        if (data.requested && data.request) {
+          card.replaceChildren();
+          const successBadge = document.createElement("div");
+          successBadge.className = "accesslens-request-success";
+          const countText = data.request.request_count > 1 ? ` (${data.request.request_count} requests)` : "";
+          successBadge.textContent = `✓ Website Requested${countText} • Status: ${data.request.status.replace("_", " ")}`;
+          card.append(successBadge);
+        }
+      }
+    })
+    .catch(() => {});
+
+  requestBtn.addEventListener("click", async () => {
+    requestBtn.disabled = true;
+    requestBtn.textContent = t(language, "requestingWebsite");
+    statusMsg.textContent = "";
+
+    try {
+      const response = await apiFetch(`${backendApiUrl}/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: {
+          url: window.location.href,
+          siteName: document.title || window.location.hostname,
+          userNote: noteInput.value.trim()
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json() as { request: { request_count: number } };
+        card.replaceChildren();
+        const successBadge = document.createElement("div");
+        successBadge.className = "accesslens-request-success";
+        const countText = data.request.request_count > 1 ? ` (${data.request.request_count} total requests)` : "";
+        successBadge.textContent = `${t(language, "websiteRequestedSuccess")}${countText}`;
+        card.append(successBadge);
+      } else {
+        requestBtn.disabled = false;
+        requestBtn.textContent = t(language, "requestWebsite");
+        statusMsg.textContent = "Could not submit request. Please try again.";
+      }
+    } catch {
+      requestBtn.disabled = false;
+      requestBtn.textContent = t(language, "requestWebsite");
+      statusMsg.textContent = "Network error. Could not connect to backend.";
+    }
+  });
+
+  body.append(noteInput, requestBtn);
+  card.append(header, body, statusMsg);
+  return card;
+}
+
+
 let currentHighlightedElement: HTMLElement | null = null;
 let originalOutlineStyle = "";
 let originalBoxShadowStyle = "";
@@ -744,14 +846,17 @@ async function injectOverlay() {
       error instanceof Error ? error.message : "AccessLens template loading failed.",
       true
     );
+    const requestCard = createWebsiteRequestCard("en");
     const closeButton = document.createElement("button");
     closeButton.type = "button";
     closeButton.className = "accesslens-secondary-button";
+    closeButton.style.marginTop = "10px";
     closeButton.textContent = "Close";
     closeButton.addEventListener("click", () => root.remove());
-    errorPanel.append(closeButton);
+    errorPanel.append(requestCard, closeButton);
     shadowRoot.append(errorPanel);
     return;
+
   }
 
   loadingPanel.remove();
@@ -840,14 +945,18 @@ async function injectOverlay() {
 
   let draftTitle: HTMLElement | null = null;
   let draftNotice: HTMLElement | null = null;
+  let requestCardContainer: HTMLElement | null = null;
 
   if (isRuntimeAiTemplate) {
     draftTitle = document.createElement("strong");
     draftNotice = document.createElement("p");
-    description.append(draftTitle, draftNotice);
+    requestCardContainer = createWebsiteRequestCard(language);
+    description.append(draftTitle, draftNotice, requestCardContainer);
   } else {
     description.textContent = template.templateName;
   }
+
+
 
   const modeSwitcher = document.createElement("div");
   modeSwitcher.className = "accesslens-mode-switcher";

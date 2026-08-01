@@ -70,9 +70,23 @@ export type DeveloperTemplateDetail = DeveloperTemplateSummary & {
   template_versions: DeveloperTemplateVersion[];
 };
 
+export type WebsiteRequest = {
+  id: string;
+  url: string;
+  base_domain: string;
+  site_name: string;
+  user_note: string | null;
+  status: "pending" | "in_review" | "fulfilled" | "rejected";
+  request_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DeveloperStats = {
   pendingTemplates: number;
   approvedTemplates: number;
   archivedTemplates: number;
   templateErrors: number;
+  pendingWebsiteRequests: number;
 };
+

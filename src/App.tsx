@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   approveDeveloperTemplate,
+  deleteWebsiteRequest,
   fetchDeveloperStats,
   fetchDeveloperTemplate,
   fetchPendingDeveloperTemplates,
+  fetchWebsiteRequests,
   rejectDeveloperTemplate,
   saveDeveloperTemplate,
+  updateWebsiteRequestStatus,
   validateDeveloperTemplate
 } from "./api/developerApi";
 import type {
@@ -14,10 +17,12 @@ import type {
   DeveloperTemplateDetail,
   DeveloperTemplateSummary,
   DeveloperValidationResult,
-  TemplateStatus
+  TemplateStatus,
+  WebsiteRequest,
+  WebsiteRequestStatus
 } from "./types/developer";
 
-type View = "dashboard" | "pending" | "review" | "fieldMappings" | "runnerInstructions";
+type View = "dashboard" | "pending" | "requests" | "review" | "fieldMappings" | "runnerInstructions";
 
 export type FormValues = {
   fullName: string;
@@ -33,8 +38,10 @@ const emptyStats: DeveloperStats = {
   pendingTemplates: 0,
   approvedTemplates: 0,
   archivedTemplates: 0,
-  templateErrors: 0
+  templateErrors: 0,
+  pendingWebsiteRequests: 0
 };
+
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -120,16 +127,101 @@ function PendingTemplatesTable({
   );
 }
 
+function WebsiteRequestsTable({
+  requests,
+  onStatusChange,
+  onDelete
+}: {
+  requests: WebsiteRequest[];
+  onStatusChange: (id: string, status: WebsiteRequestStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  if (requests.length === 0) {
+    return (
+      <EmptyState
+        title="No website requests"
+        message="Website requests submitted by users via the Chrome extension will appear here."
+      />
+    );
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Website Name</th>
+            <th>Domain / URL</th>
+            <th>Requests</th>
+            <th>User Note</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {requests.map((req) => (
+            <tr key={req.id}>
+              <td>
+                <strong>{req.site_name}</strong>
+              </td>
+              <td>
+                <a href={req.url} target="_blank" rel="noreferrer" className="table-link">
+                  {req.base_domain}
+                </a>
+              </td>
+              <td>
+                <span className="request-count-badge">
+                  {req.request_count} {req.request_count === 1 ? "request" : "requests"}
+                </span>
+              </td>
+              <td>{req.user_note || <span className="muted">None</span>}</td>
+              <td>{formatDate(req.created_at)}</td>
+              <td>
+                <StatusBadge status={req.status} />
+              </td>
+              <td>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <select
+                    value={req.status}
+                    onChange={(e) => onStatusChange(req.id, e.target.value as WebsiteRequestStatus)}
+                    style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "13px", borderColor: "#cbd5e1" }}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in_review">In Review</option>
+                    <option value="fulfilled">Fulfilled</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ padding: "4px 8px", fontSize: "12px", color: "#dc2626" }}
+                    onClick={() => onDelete(req.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Dashboard({
   stats,
   templates,
   onReview,
-  onOpenPending
+  onOpenPending,
+  onOpenRequests
 }: {
   stats: DeveloperStats;
   templates: DeveloperTemplateSummary[];
   onReview: (templateId: string) => void;
   onOpenPending: () => void;
+  onOpenRequests: () => void;
 }) {
   return (
     <>
@@ -137,15 +229,21 @@ function Dashboard({
         <div>
           <p className="eyebrow">AccessLens</p>
           <h1>Developer Console</h1>
-          <p>Review AI-generated templates before they become approved site support.</p>
+          <p>Review AI-generated templates and requested websites from users.</p>
         </div>
-        <button className="secondary-button" type="button" onClick={onOpenPending}>
-          View Pending Templates
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button className="secondary-button" type="button" onClick={onOpenRequests}>
+            View Website Requests ({stats.pendingWebsiteRequests ?? 0})
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenPending}>
+            View Pending Templates
+          </button>
+        </div>
       </section>
 
       <section className="stats-grid">
         <StatCard label="Pending templates" value={stats.pendingTemplates} />
+        <StatCard label="Website requests" value={stats.pendingWebsiteRequests ?? 0} />
         <StatCard label="Approved templates" value={stats.approvedTemplates} />
         <StatCard label="Archived templates" value={stats.archivedTemplates} />
         <StatCard label="Template errors" value={stats.templateErrors} />
@@ -161,6 +259,7 @@ function Dashboard({
     </>
   );
 }
+
 
 function FieldMappingsEditor({
   fields,
@@ -500,6 +599,7 @@ function App() {
   const [view, setView] = useState<View>("dashboard");
   const [stats, setStats] = useState<DeveloperStats>(emptyStats);
   const [pendingTemplates, setPendingTemplates] = useState<DeveloperTemplateSummary[]>([]);
+  const [websiteRequests, setWebsiteRequests] = useState<WebsiteRequest[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<DeveloperTemplateDetail | null>(null);
   const [fieldMappings, setFieldMappings] = useState<DeveloperFieldMapping[]>([]);
   const [templateName, setTemplateName] = useState("");
@@ -510,12 +610,14 @@ function App() {
   const [error, setError] = useState("");
 
   async function refreshDashboard() {
-    const [nextStats, nextTemplates] = await Promise.all([
+    const [nextStats, nextTemplates, nextRequests] = await Promise.all([
       fetchDeveloperStats(),
-      fetchPendingDeveloperTemplates()
+      fetchPendingDeveloperTemplates(),
+      fetchWebsiteRequests().catch(() => [])
     ]);
     setStats(nextStats);
     setPendingTemplates(nextTemplates);
+    setWebsiteRequests(nextRequests);
   }
 
   useEffect(() => {
@@ -523,6 +625,27 @@ function App() {
       .catch((caughtError) => setError(caughtError instanceof Error ? caughtError.message : "Failed to load console."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleStatusChange(id: string, status: WebsiteRequestStatus) {
+    try {
+      await updateWebsiteRequestStatus(id, status);
+      await refreshDashboard();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to update request status.");
+    }
+  }
+
+  async function handleDeleteRequest(id: string) {
+    if (!window.confirm("Are you sure you want to delete this website request?")) {
+      return;
+    }
+    try {
+      await deleteWebsiteRequest(id);
+      await refreshDashboard();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to delete website request.");
+    }
+  }
 
   async function openTemplate(templateId: string) {
     setLoading(true);
@@ -658,8 +781,13 @@ function App() {
           <button className={view === "dashboard" ? "nav-active" : ""} type="button" onClick={() => setView("dashboard")}>
             Dashboard
           </button>
+
           <button className={view === "pending" ? "nav-active" : ""} type="button" onClick={() => setView("pending")}>
-            Pending Templates
+            Pending Templates ({stats.pendingTemplates ?? 0})
+          </button>
+
+          <button className={view === "requests" ? "nav-active" : ""} type="button" onClick={() => setView("requests")}>
+            Website Requests ({stats.pendingWebsiteRequests ?? 0})
           </button>
         </nav>
       </aside>
@@ -674,6 +802,7 @@ function App() {
             templates={pendingTemplates}
             onReview={openTemplate}
             onOpenPending={() => setView("pending")}
+            onOpenRequests={() => setView("requests")}
           />
         )}
 
@@ -688,6 +817,25 @@ function App() {
             </section>
             <section className="panel">
               <PendingTemplatesTable templates={pendingTemplates} onReview={openTemplate} />
+            </section>
+          </>
+        )}
+
+        {view === "requests" && (
+          <>
+            <section className="page-heading">
+              <div>
+                <p className="eyebrow">User requests</p>
+                <h1>Website Support Requests</h1>
+                <p>Sites requested by users from the AccessLens Chrome Extension overlay.</p>
+              </div>
+            </section>
+            <section className="panel">
+              <WebsiteRequestsTable
+                requests={websiteRequests}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDeleteRequest}
+              />
             </section>
           </>
         )}
@@ -732,3 +880,4 @@ function App() {
 }
 
 export default App;
+

@@ -15,12 +15,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.selenium.dev/selenium/web/web-form.html",
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "https://*.gov.lk/*",
-        "http://*.gov.lk/*"
+        "<all_urls>"
       ],
+
       "js": ["assets/contentScript.js"]
     }
   ]

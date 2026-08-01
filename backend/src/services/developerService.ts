@@ -1,4 +1,5 @@
 import { pool, query } from "../db.js";
+import { countPendingWebsiteRequests } from "./requestService.js";
 import type { AccessLensField, AccessLensTemplate, TemplateStatus } from "../types.js";
 import type {
   DeveloperFieldMapping,
@@ -132,7 +133,7 @@ async function getTemplateJson(templateId: string) {
 }
 
 export async function getDeveloperStats(): Promise<DeveloperStats> {
-  const [templateCounts, errorCounts] = await Promise.all([
+  const [templateCounts, errorCounts, pendingRequestsCount] = await Promise.all([
     query<CountRow>(
       `
         select status, count(*)::text as count
@@ -140,7 +141,8 @@ export async function getDeveloperStats(): Promise<DeveloperStats> {
         group by status
       `
     ),
-    query<ErrorCountRow>("select count(*)::text as count from anonymous_template_errors")
+    query<ErrorCountRow>("select count(*)::text as count from anonymous_template_errors"),
+    countPendingWebsiteRequests()
   ]);
 
   const counts = new Map(
@@ -151,9 +153,11 @@ export async function getDeveloperStats(): Promise<DeveloperStats> {
     pendingTemplates: counts.get("pending_review") ?? 0,
     approvedTemplates: counts.get("approved") ?? 0,
     archivedTemplates: counts.get("archived") ?? 0,
-    templateErrors: Number(errorCounts.rows[0]?.count ?? 0)
+    templateErrors: Number(errorCounts.rows[0]?.count ?? 0),
+    pendingWebsiteRequests: pendingRequestsCount
   };
 }
+
 
 export async function listPendingDeveloperTemplates() {
   const result = await query<TemplateSummaryRow>(

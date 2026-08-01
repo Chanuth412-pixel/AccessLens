@@ -101,10 +101,25 @@ create table if not exists anonymous_template_errors (
   created_at timestamptz not null default now()
 );
 
+create table if not exists website_requests (
+  id uuid primary key default gen_random_uuid(),
+  url text not null,
+  base_domain text not null unique,
+  site_name text not null,
+  user_note text,
+  status text not null default 'pending'
+    check (status in ('pending', 'in_review', 'fulfilled', 'rejected')),
+  request_count integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_templates_status on templates(status);
 create index if not exists idx_templates_site_id on templates(site_id);
 create index if not exists idx_field_mappings_template_id on field_mappings(template_id);
 create index if not exists idx_runner_instructions_template_id on runner_instructions(template_id);
+create index if not exists idx_website_requests_status on website_requests(status);
+create index if not exists idx_website_requests_base_domain on website_requests(base_domain);
 
 -- AccessLens reads these tables through its private backend connection only.
 alter table sites enable row level security;
@@ -114,6 +129,7 @@ alter table field_mappings enable row level security;
 alter table runner_instructions enable row level security;
 alter table validation_rules enable row level security;
 alter table anonymous_template_errors enable row level security;
+alter table website_requests enable row level security;
 
 revoke all on table sites from anon, authenticated;
 revoke all on table templates from anon, authenticated;
@@ -122,3 +138,5 @@ revoke all on table field_mappings from anon, authenticated;
 revoke all on table runner_instructions from anon, authenticated;
 revoke all on table validation_rules from anon, authenticated;
 revoke all on table anonymous_template_errors from anon, authenticated;
+revoke all on table website_requests from anon, authenticated;
+

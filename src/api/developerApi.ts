@@ -3,8 +3,10 @@ import type {
   DeveloperStats,
   DeveloperTemplateDetail,
   DeveloperTemplateSummary,
-  DeveloperValidationResult
+  DeveloperValidationResult,
+  WebsiteRequest
 } from "../types/developer";
+
 
 const apiBaseUrl = "http://localhost:4000/api";
 
@@ -87,3 +89,23 @@ export async function validateDeveloperTemplate(templateId: string) {
     method: "POST"
   });
 }
+
+export async function fetchWebsiteRequests() {
+  const data = await requestJson<{ requests: WebsiteRequest[] }>("/developer/website-requests");
+  return data.requests;
+}
+
+export async function updateWebsiteRequestStatus(id: string, status: string) {
+  const data = await requestJson<{ request: WebsiteRequest }>(`/developer/website-requests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  });
+  return data.request;
+}
+
+export async function deleteWebsiteRequest(id: string) {
+  return requestJson<{ ok: boolean }>(`/developer/website-requests/${id}`, {
+    method: "DELETE"
+  });
+}
+

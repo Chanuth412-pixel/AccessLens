@@ -8,6 +8,12 @@ import {
   updateDeveloperTemplate,
   validateDeveloperTemplateDetail
 } from "../services/developerService.js";
+import {
+  deleteWebsiteRequest,
+  listWebsiteRequests,
+  updateWebsiteRequestStatus
+} from "../services/requestService.js";
+
 
 export const developerRouter = Router();
 
@@ -106,3 +112,50 @@ developerRouter.post("/templates/:templateId/validate", async (request, response
     next(error);
   }
 });
+
+developerRouter.get("/website-requests", async (_request, response, next) => {
+  try {
+    const requests = await listWebsiteRequests();
+    response.json({ requests });
+  } catch (error) {
+    next(error);
+  }
+});
+
+developerRouter.patch("/website-requests/:id", async (request, response, next) => {
+  try {
+    const { status } = request.body as { status?: string };
+
+    if (!status) {
+      response.status(400).json({ error: "Missing required parameter: status" });
+      return;
+    }
+
+    const updated = await updateWebsiteRequestStatus(request.params.id, status);
+
+    if (!updated) {
+      response.status(404).json({ error: "Website request not found" });
+      return;
+    }
+
+    response.json({ request: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+developerRouter.delete("/website-requests/:id", async (request, response, next) => {
+  try {
+    const deleted = await deleteWebsiteRequest(request.params.id);
+
+    if (!deleted) {
+      response.status(404).json({ error: "Website request not found" });
+      return;
+    }
+
+    response.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
