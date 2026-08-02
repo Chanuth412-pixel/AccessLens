@@ -8,6 +8,8 @@ export const accessLensFieldSchema = z.object({
   xpath: z.string().optional(),
   required: z.boolean().optional(),
   validationRule: z.string().optional(),
+  validationPattern: z.string().optional(),
+  validationMessage: z.string().optional(),
   options: z.array(z.string()).optional(),
   originalLabel: z.string().optional(),
   confidence: z.number().min(0).max(1).optional(),
@@ -34,11 +36,23 @@ export const runnerInstructionSchema = z.object({
 });
 
 export const accessLensTemplateSchema = z.object({
-  source: z.enum(["approved", "ai-runtime-generated"]).optional(),
+  source: z.enum(["approved", "manually-approved", "ai-runtime-generated"]).optional(),
   siteId: z.string().min(1),
   siteName: z.string().min(1),
   templateKey: z.string().min(1),
   templateName: z.string().min(1),
+  pageHeading: z.string().min(1).max(300).optional(),
+  pageDetection: z.object({
+    headingText: z.string().min(1).max(300),
+    requiredSelectors: z.array(z.string().min(1).max(500))
+  }).optional(),
+  workflow: z.object({
+    workflowKey: z.string().min(1).max(200),
+    pageKey: z.string().min(1).max(200),
+    pageOrder: z.number().int().positive(),
+    totalPages: z.number().int().positive(),
+    nextPageKey: z.string().min(1).max(200).nullable()
+  }).optional(),
   version: z.string().min(1),
   urlPatterns: z.array(z.string().min(1)).min(1),
   fields: z.array(accessLensFieldSchema),

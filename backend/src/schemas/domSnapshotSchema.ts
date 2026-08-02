@@ -23,6 +23,7 @@ export const generateTemplateRequestSchema = z.object({
       message: "Only HTTP and HTTPS pages are supported"
     }),
   title: z.string().max(300),
+  heading: z.string().max(300).optional(),
   language: z.string().max(30),
   elements: z.array(domElementSnapshotSchema).min(1).max(100)
 });
