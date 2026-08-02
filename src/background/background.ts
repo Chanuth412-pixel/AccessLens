@@ -7,7 +7,6 @@ type AccessLensWindowSession = {
   fields: unknown[];
   values: Record<string, string>;
   language: "en" | "si";
-  isRuntimeAiTemplate: boolean;
 };
 
 type RuntimeMessage = {

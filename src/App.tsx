@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   approveDeveloperTemplate,
-  deleteWebsiteRequest,
   fetchDeveloperStats,
   fetchDeveloperTemplate,
   fetchPendingDeveloperTemplates,
   fetchWebsiteRequests,
+  generateWebsiteRequestTemplate,
   rejectDeveloperTemplate,
   saveDeveloperTemplate,
-  updateWebsiteRequestStatus,
   validateDeveloperTemplate
 } from "./api/developerApi";
 import type {
@@ -18,8 +17,7 @@ import type {
   DeveloperTemplateSummary,
   DeveloperValidationResult,
   TemplateStatus,
-  WebsiteRequest,
-  WebsiteRequestStatus
+  WebsiteRequest
 } from "./types/developer";
 
 type View = "dashboard" | "pending" | "requests" | "review" | "fieldMappings" | "runnerInstructions";
@@ -129,12 +127,14 @@ function PendingTemplatesTable({
 
 function WebsiteRequestsTable({
   requests,
-  onStatusChange,
-  onDelete
+  generatingRequestId,
+  onCreateTemplate,
+  onReviewTemplate
 }: {
   requests: WebsiteRequest[];
-  onStatusChange: (id: string, status: WebsiteRequestStatus) => void;
-  onDelete: (id: string) => void;
+  generatingRequestId: string | null;
+  onCreateTemplate: (id: string) => void;
+  onReviewTemplate: (templateId: string) => void;
 }) {
   if (requests.length === 0) {
     return (
@@ -156,7 +156,7 @@ function WebsiteRequestsTable({
             <th>User Note</th>
             <th>Date</th>
             <th>Status</th>
-            <th>Action</th>
+            <th>Template</th>
           </tr>
         </thead>
         <tbody>
@@ -181,26 +181,28 @@ function WebsiteRequestsTable({
                 <StatusBadge status={req.status} />
               </td>
               <td>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <select
-                    value={req.status}
-                    onChange={(e) => onStatusChange(req.id, e.target.value as WebsiteRequestStatus)}
-                    style={{ padding: "4px 8px", borderRadius: "6px", fontSize: "13px", borderColor: "#cbd5e1" }}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in_review">In Review</option>
-                    <option value="fulfilled">Fulfilled</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+                {req.template_id && req.template_status === "pending_review" ? (
                   <button
                     type="button"
-                    className="secondary-button"
-                    style={{ padding: "4px 8px", fontSize: "12px", color: "#dc2626" }}
-                    onClick={() => onDelete(req.id)}
+                    className="secondary-button request-template-button"
+                    onClick={() => onReviewTemplate(req.template_id as string)}
                   >
-                    Delete
+                    Review Template
                   </button>
-                </div>
+                ) : req.template_status === "approved" ? (
+                  <button type="button" className="secondary-button request-template-button" disabled>
+                    Template Approved
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary-button request-template-button"
+                    disabled={generatingRequestId !== null}
+                    onClick={() => onCreateTemplate(req.id)}
+                  >
+                    {generatingRequestId === req.id ? "Generating..." : "Create Template"}
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -606,6 +608,7 @@ function App() {
   const [urlPatternsText, setUrlPatternsText] = useState("");
   const [validation, setValidation] = useState<DeveloperValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generatingRequestId, setGeneratingRequestId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -626,24 +629,25 @@ function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleStatusChange(id: string, status: WebsiteRequestStatus) {
-    try {
-      await updateWebsiteRequestStatus(id, status);
-      await refreshDashboard();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Failed to update request status.");
-    }
-  }
+  async function handleCreateTemplate(id: string) {
+    setGeneratingRequestId(id);
+    setError("");
+    setMessage("");
+    setValidation(null);
 
-  async function handleDeleteRequest(id: string) {
-    if (!window.confirm("Are you sure you want to delete this website request?")) {
-      return;
-    }
     try {
-      await deleteWebsiteRequest(id);
+      const { template } = await generateWebsiteRequestTemplate(id);
+      setSelectedTemplate(template);
+      setFieldMappings(template.field_mappings);
+      setTemplateName(template.template_name);
+      setUrlPatternsText(template.url_patterns.join("\n"));
       await refreshDashboard();
+      setMessage("AI template created in pending review. Validate its mappings before approval.");
+      setView("review");
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Failed to delete website request.");
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to generate the website template.");
+    } finally {
+      setGeneratingRequestId(null);
     }
   }
 
@@ -669,7 +673,7 @@ function App() {
 
   async function saveCurrentTemplate() {
     if (!selectedTemplate) {
-      return;
+      return null;
     }
 
     setLoading(true);
@@ -685,8 +689,10 @@ function App() {
       setSelectedTemplate(updatedTemplate);
       setFieldMappings(updatedTemplate.field_mappings);
       setMessage("Changes saved.");
+      return updatedTemplate;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Failed to save changes.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -710,16 +716,31 @@ function App() {
   }
 
   async function approveCurrentTemplate() {
-    if (!selectedTemplate || !window.confirm("Approve this template for normal extension use?")) {
+    if (!selectedTemplate) {
       return;
     }
 
-    await saveCurrentTemplate();
+    const savedTemplate = await saveCurrentTemplate();
+    if (!savedTemplate) {
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     try {
-      const approved = await approveDeveloperTemplate(selectedTemplate.id);
+      const validationResult = await validateDeveloperTemplate(savedTemplate.id);
+      setValidation(validationResult);
+      if (!validationResult.valid) {
+        setError("Template validation failed. Fix the field mappings before approval.");
+        return;
+      }
+
+      if (!window.confirm("Validation passed. Approve this template for normal extension use?")) {
+        return;
+      }
+
+      const approved = await approveDeveloperTemplate(savedTemplate.id);
       setSelectedTemplate(approved);
       setMessage("Template approved. The extension can now fetch it as an approved template.");
       await refreshDashboard();
@@ -833,8 +854,9 @@ function App() {
             <section className="panel">
               <WebsiteRequestsTable
                 requests={websiteRequests}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDeleteRequest}
+                generatingRequestId={generatingRequestId}
+                onCreateTemplate={handleCreateTemplate}
+                onReviewTemplate={openTemplate}
               />
             </section>
           </>

@@ -10,7 +10,7 @@
 
 AccessLens detects a supported form, loads an approved field-mapping template, and presents the same questions in a clearer interface. A user can complete the simplified form in an overlay, a step-by-step wizard, or a separate window. AccessLens fills the original page only after confirmation and never submits it automatically.
 
-When a site has no approved template, the backend can generate a draft from a privacy-filtered description of the page. Every generated draft enters a developer review queue before it can become normal site support.
+When a site has no approved template, the extension offers a website-support request instead of generating a user-side AI template. A developer can generate a draft from the request, review it, and approve it before it becomes normal site support.
 
 > [!IMPORTANT]
 > AccessLens is a prototype. The developer API currently has a placeholder authentication guard and must not be exposed publicly without real authentication and authorization.
@@ -169,7 +169,7 @@ After frontend or extension changes, run `npm run build`, reload the extension f
 | `GET` | `/api/instructions/resolve?url=...&heading=...` | Resolve user-facing workflow guidance by URL and normalized H1 |
 | `GET` | `/api/instructions/workflows/:workflowKey/first` | Return the first active workflow instruction |
 | `POST` | `/api/instructions/:instructionId/ai-support` | Return a short AI simplification of an active instruction |
-| `POST` | `/api/ai/generate-template` | Generate or reuse a pending draft |
+| `POST` | `/api/developer/website-requests/:id/generate-template` | Generate a pending draft for a requested website |
 | `GET` | `/api/developer/stats` | Read developer-console counts |
 | `GET` | `/api/developer/templates/pending` | List pending drafts |
 | `PATCH` | `/api/developer/templates/:id` | Update a draft and its field mappings |

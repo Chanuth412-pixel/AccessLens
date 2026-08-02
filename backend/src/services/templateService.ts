@@ -298,6 +298,14 @@ export async function findReviewDraftTemplateByUrl(url: string, allowedSelectors
   );
 }
 
+export async function findTemplateIdByKey(templateKey: string) {
+  const result = await query<{ id: string }>(
+    "select id from templates where template_key = $1 limit 1",
+    [templateKey]
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 export async function saveGeneratedTemplateDraft(template: AccessLensTemplate) {
   const client = await pool.connect();
 

@@ -6,30 +6,8 @@ const overlayId = "accesslens-overlay-root";
 const backendApiUrl = "http://localhost:4000/api";
 const lowConfidenceThreshold = 0.7;
 
-type TemplateSource = "approved" | "ai" | "database_draft";
 type ViewMode = "all" | "wizard";
 type Language = "en" | "si";
-
-type ResolvedTemplate = {
-  template: AccessLensTemplate;
-  source: TemplateSource;
-  saved: boolean;
-};
-
-type DomElementSnapshot = {
-  tag: "input" | "select" | "textarea";
-  selector: string;
-  selectorCandidates: string[];
-  label: string;
-  id?: string;
-  name?: string;
-  placeholder?: string;
-  ariaLabel?: string;
-  inputType: string;
-  required: boolean;
-  options: string[];
-  formContext: string;
-};
 
 type FormControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
@@ -42,14 +20,6 @@ type FillResult = {
 
 function normalizeText(value: string | null | undefined, maxLength = 200) {
   return (value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
-}
-
-function escapeCssIdentifier(value: string) {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-    return CSS.escape(value);
-  }
-
-  return value.replace(/[^a-zA-Z0-9_-]/g, (character) => `\\${character}`);
 }
 
 function escapeAttributeValue(value: string) {
@@ -79,8 +49,6 @@ const uiText = {
     separateWindow: "Separate window",
     separateWindowError: "Could not open the separate window.",
     stepByStepWizard: "Step-by-Step Wizard",
-    temporaryAiTemplate: "Temporary AI template",
-    temporaryAiTemplateNotice: "Review mappings before filling.",
     requestWebsite: "Request Website Support",
     requestingWebsite: "Sending Request...",
     websiteRequestedSuccess: "Website support requested! The developer board has been notified.",
@@ -105,8 +73,6 @@ const uiText = {
     separateWindow: "වෙනම කවුළුව",
     separateWindowError: "වෙනම කවුළුව විවෘත කළ නොහැක.",
     stepByStepWizard: "පියවරෙන් පියවර",
-    temporaryAiTemplate: "තාවකාලික AI ආකෘතිය",
-    temporaryAiTemplateNotice: "පිරවීමට පෙර ගැළපීම් පරීක්ෂා කරන්න.",
     requestWebsite: "මෙම වෙබ් අඩවිය සඳහා ඉල්ලුම් කරන්න",
     requestingWebsite: "යවමින් පවතී...",
     websiteRequestedSuccess: "සහාය ඉල්ලුම් කරන ලදී! සංවර්ධක මණ්ඩලයට දැනුම් දී ඇත.",
@@ -139,103 +105,6 @@ function translateFieldLabel(label: string, language: Language) {
   }
 
   return sinhalaFieldLabels[normalizeText(label).toLowerCase()] ?? label;
-}
-
-function isUniqueSelector(selector: string) {
-  try {
-    return document.querySelectorAll(selector).length === 1;
-  } catch {
-    return false;
-  }
-}
-
-function addUniqueSelector(selectors: string[], selector: string) {
-  if (selector && isUniqueSelector(selector) && !selectors.includes(selector)) {
-    selectors.push(selector);
-  }
-}
-
-function createSelectorCandidates(element: FormControl) {
-  const tag = element.tagName.toLowerCase();
-  const selectors: string[] = [];
-
-  if (element.id) {
-    addUniqueSelector(selectors, `#${escapeCssIdentifier(element.id)}`);
-  }
-
-  if (element.name) {
-    addUniqueSelector(selectors, `${tag}[name="${escapeAttributeValue(element.name)}"]`);
-  }
-
-  for (const attribute of ["data-testid", "data-test", "data-cy", "data-field"] as const) {
-    const value = element.getAttribute(attribute);
-    if (value) {
-      addUniqueSelector(selectors, `${tag}[${attribute}="${escapeAttributeValue(value)}"]`);
-    }
-  }
-
-  const ariaLabel = element.getAttribute("aria-label");
-  if (ariaLabel) {
-    addUniqueSelector(selectors, `${tag}[aria-label="${escapeAttributeValue(ariaLabel)}"]`);
-  }
-
-  const placeholder = element.getAttribute("placeholder");
-  if (placeholder) {
-    addUniqueSelector(selectors, `${tag}[placeholder="${escapeAttributeValue(placeholder)}"]`);
-  }
-
-  const path: string[] = [];
-  let current: Element | null = element;
-
-  while (current && current !== document.body) {
-    const currentTag = current.tagName.toLowerCase();
-    const siblings = current.parentElement
-      ? Array.from(current.parentElement.children).filter((sibling) => sibling.tagName === current?.tagName)
-      : [];
-    const position = siblings.indexOf(current) + 1;
-    path.unshift(`${currentTag}:nth-of-type(${Math.max(position, 1)})`);
-
-    const selector = path.join(" > ");
-    if (isUniqueSelector(selector)) {
-      addUniqueSelector(selectors, selector);
-      break;
-    }
-
-    current = current.parentElement;
-  }
-
-  return selectors.slice(0, 8);
-}
-
-function getControlLabel(element: FormControl, index: number) {
-  const associatedLabel = Array.from(element.labels ?? [])
-    .map((label) => normalizeText(label.textContent))
-    .find(Boolean);
-
-  const labelledBy = element.getAttribute("aria-labelledby")
-    ?.split(/\s+/)
-    .map((id) => normalizeText(document.getElementById(id)?.textContent))
-    .find(Boolean);
-
-  return associatedLabel
-    || labelledBy
-    || normalizeText(element.getAttribute("aria-label"))
-    || normalizeText(element.getAttribute("placeholder"))
-    || normalizeText(element.name)
-    || normalizeText(element.id)
-    || `Field ${index + 1}`;
-}
-
-function getFormContext(element: FormControl) {
-  const fieldset = element.closest("fieldset");
-  const legend = fieldset?.querySelector("legend");
-  const form = element.closest("form");
-
-  return normalizeText(legend?.textContent)
-    || normalizeText(form?.getAttribute("aria-label"))
-    || normalizeText(form?.getAttribute("name"))
-    || normalizeText(form?.id)
-    || "";
 }
 
 function isSafeInputType(input: HTMLInputElement) {
@@ -271,45 +140,6 @@ function isSafeFillTarget(element: Element | null): element is FormControl {
   }
 
   return isSupportedControl(element);
-}
-
-function buildDomSnapshot() {
-  const controls = Array.from(
-    document.querySelectorAll<FormControl>("input, select, textarea")
-  )
-    .filter(isSupportedControl)
-    .slice(0, 100);
-
-  return controls.reduce<DomElementSnapshot[]>((snapshot, element, index) => {
-    const selectorCandidates = createSelectorCandidates(element);
-    const selector = selectorCandidates[0];
-
-    if (!selector) {
-      return snapshot;
-    }
-
-    snapshot.push({
-      tag: element.tagName.toLowerCase() as DomElementSnapshot["tag"],
-      selector,
-      selectorCandidates,
-      label: getControlLabel(element, index),
-      id: normalizeText(element.id) || undefined,
-      name: normalizeText(element.name) || undefined,
-      placeholder: normalizeText(element.getAttribute("placeholder")) || undefined,
-      ariaLabel: normalizeText(element.getAttribute("aria-label")) || undefined,
-      inputType: element instanceof HTMLInputElement ? element.type || "text" : element.tagName.toLowerCase(),
-      required: element.required || element.getAttribute("aria-required") === "true",
-      options: element instanceof HTMLSelectElement
-        ? Array.from(element.options)
-          .filter((option) => !option.disabled && normalizeText(option.textContent))
-          .map((option) => normalizeText(option.textContent))
-          .slice(0, 100)
-        : [],
-      formContext: getFormContext(element)
-    });
-
-    return snapshot;
-  }, []);
 }
 
 declare const chrome: {
@@ -841,135 +671,25 @@ function showSubmissionBlockedWarning(shadowRoot: ShadowRoot, messageElement?: H
   toast.textContent = warningText;
 }
 
-function withRuntimeSafetyDefaults(template: AccessLensTemplate) {
-  return {
-    ...template,
-    source: "ai-runtime-generated" as const,
-    policies: template.policies ?? {
-      storePersonalData: false,
-      autoSubmit: false,
-      manualReviewRequired: true
-    },
-    fields: template.fields.map((field) => ({
-      ...field,
-      originalLabel: field.originalLabel ?? field.label,
-      confidence: typeof field.confidence === "number" ? field.confidence : 0.5,
-      events: field.events ?? ["input", "change"],
-      temporary: true
-    }))
-  };
-}
-
-function validateRuntimeTemplate(template: AccessLensTemplate) {
-  const safeTemplate = withRuntimeSafetyDefaults(template);
-
-  if (!Array.isArray(safeTemplate.fields) || safeTemplate.fields.length === 0) {
-    throw new Error("AI template did not include any fields.");
-  }
-
-  if (
-    safeTemplate.policies.storePersonalData !== false
-    || safeTemplate.policies.autoSubmit !== false
-    || safeTemplate.policies.manualReviewRequired !== true
-  ) {
-    throw new Error("AI template policies are not safe.");
-  }
-
-  for (const field of safeTemplate.fields) {
-    if (
-      !field.id
-      || !field.label
-      || !field.type
-      || !field.selector
-      || typeof field.required !== "boolean"
-      || typeof field.confidence !== "number"
-      || field.confidence < 0
-      || field.confidence > 1
-    ) {
-      throw new Error("AI template has an invalid field mapping.");
-    }
-
-    let target: Element | null = null;
-    try {
-      target = document.querySelector(field.selector);
-    } catch {
-      throw new Error(`AI template selector is invalid: ${field.selector}`);
-    }
-
-    if (!isSafeFillTarget(target)) {
-      throw new Error(`AI template points to an unsafe or unavailable field: ${field.label}`);
-    }
-  }
-
-  return safeTemplate;
-}
-
-async function generateAiTemplate() {
-  const elements = buildDomSnapshot();
-
-  if (elements.length === 0) {
-    throw new Error("No supported form fields were found on this page.");
-  }
-
-  const response = await apiFetch(`${backendApiUrl}/ai/generate-template`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: {
-      url: window.location.href,
-      title: normalizeText(document.title, 300),
-      heading: getCurrentPageHeading(),
-      language: normalizeText(
-        document.documentElement.lang || navigator.language || "unknown",
-        30
-      ),
-      elements
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(await getApiError(response, "AccessLens could not generate an AI template."));
-  }
-
-  const generated = await response.json() as {
-    template: AccessLensTemplate;
-    source: "ai" | "database_draft";
-    saved: boolean;
-  };
-
-  return {
-    ...generated,
-    template: validateRuntimeTemplate(generated.template)
-  };
-}
-
-async function resolveTemplateForCurrentPage(): Promise<ResolvedTemplate> {
+async function resolveTemplateForCurrentPage(): Promise<AccessLensTemplate | null> {
   const response = await apiFetch(
     `${backendApiUrl}/templates/resolve?url=${encodeURIComponent(window.location.href)}&heading=${encodeURIComponent(getCurrentPageHeading())}`
   );
 
   if (response.ok) {
     const data = await response.json() as { template: AccessLensTemplate };
-    return { template: data.template, source: "approved", saved: true };
+    return data.template;
   }
 
   const errorData = await response.json().catch(() => null) as {
     error?: string;
     code?: string;
   } | null;
-  if (
-    errorData?.code === "KNOWN_SITE_PAGE_NOT_CONFIGURED"
-    || errorData?.code === "AMBIGUOUS_TEMPLATE_MATCH"
-    || response.status !== 404
-  ) {
-    throw new Error(errorData?.error || "AccessLens could not resolve an approved page template.");
+  if (response.status === 404) {
+    return null;
   }
 
-  const generated = await generateAiTemplate();
-  return {
-    template: generated.template,
-    source: generated.source,
-    saved: generated.saved
-  };
+  throw new Error(errorData?.error || "AccessLens could not resolve an approved page template.");
 }
 
 function createFieldControl(field: AccessLensField, language: Language) {
@@ -1417,16 +1137,33 @@ async function injectOverlay() {
     return;
   }
 
-  let resolved: ResolvedTemplate;
+  let template: AccessLensTemplate | null;
 
   try {
-    resolved = await resolveTemplateForCurrentPage();
+    template = await resolveTemplateForCurrentPage();
   } catch (error) {
     loadingPanel.remove();
     const errorPanel = createStatusPanel(
-      "AccessLens",
+      "AccessLens unavailable",
       error instanceof Error ? error.message : "AccessLens template loading failed.",
       true
+    );
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "accesslens-secondary-button";
+    closeButton.style.marginTop = "10px";
+    closeButton.textContent = "Close";
+    closeButton.addEventListener("click", () => root.remove());
+    errorPanel.append(closeButton);
+    shadowRoot.append(errorPanel);
+    return;
+  }
+
+  if (!template) {
+    loadingPanel.remove();
+    const unsupportedPanel = createStatusPanel(
+      "Website support needed",
+      "No approved AccessLens template is available for this website yet."
     );
     const requestCard = createWebsiteRequestCard("en");
     const closeButton = document.createElement("button");
@@ -1435,16 +1172,13 @@ async function injectOverlay() {
     closeButton.style.marginTop = "10px";
     closeButton.textContent = "Close";
     closeButton.addEventListener("click", () => root.remove());
-    errorPanel.append(requestCard, closeButton);
-    shadowRoot.append(errorPanel);
+    unsupportedPanel.append(requestCard, closeButton);
+    shadowRoot.append(unsupportedPanel);
     return;
-
   }
 
   loadingPanel.remove();
-  const { template, source } = resolved;
   const fields = template.fields.filter((field) => field.type !== "password");
-  const isRuntimeAiTemplate = source !== "approved";
 
   if (fields.length === 0 && instruction?.completion_rule.completes_workflow === true) {
     await clearWorkflowProgress();
@@ -1486,8 +1220,8 @@ async function injectOverlay() {
   title.textContent = "AccessLens";
 
   const statusBadge = document.createElement("span");
-  statusBadge.className = `accesslens-badge ${isRuntimeAiTemplate ? "accesslens-badge-ai" : "accesslens-badge-approved"}`;
-  statusBadge.textContent = isRuntimeAiTemplate ? "AI Mapped" : "Approved";
+  statusBadge.className = "accesslens-badge accesslens-badge-approved";
+  statusBadge.textContent = "Approved";
 
   brandGroup.append(logoMark, title, statusBadge);
 
@@ -1536,22 +1270,8 @@ async function injectOverlay() {
   languageSwitcher.append(englishButton, sinhalaButton);
 
   const description = document.createElement("div");
-  description.className = isRuntimeAiTemplate
-    ? "accesslens-description accesslens-ai-draft"
-    : "accesslens-description";
-
-  let draftTitle: HTMLElement | null = null;
-  let draftNotice: HTMLElement | null = null;
-  let requestCardContainer: HTMLElement | null = null;
-
-  if (isRuntimeAiTemplate) {
-    draftTitle = document.createElement("strong");
-    draftNotice = document.createElement("p");
-    requestCardContainer = createWebsiteRequestCard(language);
-    description.append(draftTitle, draftNotice, requestCardContainer);
-  } else {
-    description.textContent = template.templateName;
-  }
+  description.className = "accesslens-description";
+  description.textContent = template.templateName;
 
 
 
@@ -1640,10 +1360,6 @@ async function injectOverlay() {
     closeButton.textContent = t(language, "close");
     separateWindowButton.textContent = t(language, "separateWindow");
 
-    if (draftTitle && draftNotice) {
-      draftTitle.textContent = t(language, "temporaryAiTemplate");
-      draftNotice.textContent = t(language, "temporaryAiTemplateNotice");
-    }
   };
 
   const movePanelTo = (left: number, top: number) => {
@@ -1932,8 +1648,7 @@ async function injectOverlay() {
           templateName: template.templateName,
           fields,
           values: formValuesState,
-          language,
-          isRuntimeAiTemplate
+          language
         }
       },
       (response) => {

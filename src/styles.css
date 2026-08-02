@@ -540,6 +540,17 @@ input[type="checkbox"] {
   transform: translateY(-1px);
 }
 
+.request-template-button {
+  min-width: 142px;
+  white-space: nowrap;
+}
+
+.request-template-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+}
+
 .primary-button {
   border: 1px solid #2563eb;
   color: #ffffff;
@@ -608,6 +619,10 @@ input[type="checkbox"] {
 }
 
 .status-pending_review { border-color: rgba(245, 158, 11, 0.2); color: #a16207; background: rgba(254, 243, 199, 0.72); }
+.status-pending { border-color: rgba(100, 116, 139, 0.18); color: #475569; background: rgba(226, 232, 240, 0.72); }
+.status-in_review { border-color: rgba(245, 158, 11, 0.2); color: #a16207; background: rgba(254, 243, 199, 0.72); }
+.status-fulfilled { border-color: rgba(16, 185, 129, 0.2); color: #047857; background: rgba(209, 250, 229, 0.72); }
+.status-rejected { border-color: rgba(244, 63, 94, 0.18); color: #be123c; background: rgba(255, 228, 230, 0.72); }
 .status-approved { border-color: rgba(16, 185, 129, 0.2); color: #047857; background: rgba(209, 250, 229, 0.72); }
 .status-archived { border-color: rgba(244, 63, 94, 0.18); color: #be123c; background: rgba(255, 228, 230, 0.72); }
 .status-draft { border-color: rgba(100, 116, 139, 0.18); color: #475569; background: rgba(226, 232, 240, 0.72); }

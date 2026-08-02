@@ -9,7 +9,6 @@ type AccessLensWindowSession = {
   fields: AccessLensField[];
   values: Record<string, string>;
   language: Language;
-  isRuntimeAiTemplate: boolean;
 };
 
 declare const chrome: {
@@ -30,9 +29,7 @@ const text = {
     hint: "Place this window beside the website, enter details here, then fill the original form.",
     loading: "Loading AccessLens window...",
     missingSession: "AccessLens session not found. Open this window again from the website overlay.",
-    notEntered: "Not entered",
-    temporaryAiTemplate: "Temporary AI template",
-    temporaryAiTemplateNotice: "Review mappings before filling."
+    notEntered: "Not entered"
   },
   si: {
     allFields: "සියලු ක්ෂේත්‍ර",
@@ -41,9 +38,7 @@ const text = {
     hint: "මෙම කවුළුව වෙබ් අඩවිය අසල තබා තොරතුරු ඇතුළත් කර මුල් පෝරමය පුරවන්න.",
     loading: "AccessLens කවුළුව පූරණය වෙමින් පවතී...",
     missingSession: "AccessLens සැසිය හමු නොවීය. වෙබ් අඩවි overlay එකෙන් නැවත විවෘත කරන්න.",
-    notEntered: "ඇතුළත් කර නැත",
-    temporaryAiTemplate: "තාවකාලික AI ආකෘතිය",
-    temporaryAiTemplateNotice: "පිරවීමට පෙර ගැළපීම් පරීක්ෂා කරන්න."
+    notEntered: "ඇතුළත් කර නැත"
   }
 } satisfies Record<Language, Record<string, string>>;
 
@@ -157,27 +152,6 @@ const windowStyles = `
     color: #64748b;
     font-size: 13.5px;
     line-height: 1.45;
-  }
-
-  .accesslens-ai-draft {
-    border: 1px solid #fde68a;
-    border-left: 4px solid #f59e0b;
-    border-radius: 8px;
-    padding: 10px 12px;
-    background: #fffbeb;
-    color: #92400e;
-  }
-
-  .accesslens-ai-draft strong,
-  .accesslens-ai-draft p {
-    display: inline;
-    margin: 0;
-  }
-
-  .accesslens-ai-draft strong {
-    margin-right: 8px;
-    color: #78350f;
-    font-size: 13.5px;
   }
 
   .accesslens-form,
@@ -389,12 +363,6 @@ function renderSession(session: AccessLensWindowSession) {
   sinhalaButton.textContent = "සිංහල";
   languageSwitcher.append(englishButton, sinhalaButton);
 
-  const notice = document.createElement("div");
-  notice.className = "accesslens-description accesslens-ai-draft";
-  const noticeTitle = document.createElement("strong");
-  const noticeText = document.createElement("p");
-  notice.append(noticeTitle, noticeText);
-
   const intro = document.createElement("p");
   intro.className = "accesslens-window-intro";
 
@@ -423,8 +391,6 @@ function renderSession(session: AccessLensWindowSession) {
     document.documentElement.lang = language === "si" ? "si" : "en";
     englishButton.className = `accesslens-language-btn ${language === "en" ? "active" : ""}`;
     sinhalaButton.className = `accesslens-language-btn ${language === "si" ? "active" : ""}`;
-    noticeTitle.textContent = text[language].temporaryAiTemplate;
-    noticeText.textContent = text[language].temporaryAiTemplateNotice;
     intro.textContent = text[language].hint;
     fillButton.textContent = text[language].fillOriginal;
     closeButton.textContent = text[language].close;
@@ -471,7 +437,7 @@ function renderSession(session: AccessLensWindowSession) {
 
   actions.append(fillButton, closeButton);
   form.append(formContent, actions);
-  panel.append(titlebar, languageSwitcher, notice, intro, form, message);
+  panel.append(titlebar, languageSwitcher, intro, form, message);
   root.replaceChildren(style, panel);
   renderText();
   renderFields();

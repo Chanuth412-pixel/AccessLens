@@ -8,7 +8,7 @@ Responsibilities:
 
 - Detect the current website URL.
 - Request an approved template from the backend.
-- When no approved template exists, send a privacy-filtered DOM snapshot to the backend.
+- When no approved template exists, show the user the website-support request button.
 - Render the AccessLens UI.
 - Collect user input in browser memory only.
 - Validate and normalize user input locally.
@@ -34,7 +34,7 @@ Responsibilities:
 - Receive a URL from the extension.
 - Find a matching approved template.
 - Return template JSON to the extension.
-- Generate a draft template with the configured AI provider when no approved template exists.
+- Generate a draft template with the configured AI provider only when a developer starts generation for a website request.
 - Validate every AI response and reject selectors that were not present in the page snapshot.
 - Save generated templates as `pending_review`, never as automatically approved templates.
 - Support future admin/template tooling.
@@ -53,7 +53,7 @@ API endpoints:
 - `GET /api/health`
 - `GET /api/templates`
 - `GET /api/templates/match?url=https://www.selenium.dev/selenium/web/web-form.html`
-- `POST /api/ai/generate-template`
+- `POST /api/developer/website-requests/:id/generate-template`
 
 ## Database
 
@@ -90,13 +90,13 @@ not contain the current values of any website fields.
 1. The extension opens on a supported `gov.lk` page or the Selenium demo page.
 2. It asks the backend for an approved database template.
 3. If one exists, the extension renders it immediately without calling AI.
-4. If none exists, the extension extracts a privacy-filtered form structure.
-5. The backend checks whether a previous AI draft already exists for the URL.
-6. If no draft exists, the backend asks the configured AI model for a structured template.
-7. The backend validates the result and accepts only selectors from the supplied snapshot.
-8. The draft is saved with `pending_review` status and returned to the extension.
-9. AccessLens displays the AI draft and can fill the native fields, but never submits automatically.
-10. After a developer tests the mapping, approve it in PostgreSQL so future visits use it without AI.
+4. If none exists, the extension shows only the website-support request card; it does not call AI.
+5. The user submits the request, which appears in the developer console.
+6. A developer starts template generation for that website request.
+7. The backend scans the requested page and asks the configured AI model for a structured template.
+8. The backend validates the result and saves it with `pending_review` status.
+9. The developer reviews, validates, and approves the template in the console.
+10. On a future visit, the extension can load and use the approved template.
 
 Approve a tested template with:
 

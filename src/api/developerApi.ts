@@ -95,6 +95,14 @@ export async function fetchWebsiteRequests() {
   return data.requests;
 }
 
+export async function generateWebsiteRequestTemplate(id: string) {
+  const data = await requestJson<{ template: DeveloperTemplateDetail; reused: boolean }>(
+    `/developer/website-requests/${id}/generate-template`,
+    { method: "POST" }
+  );
+  return data;
+}
+
 export async function updateWebsiteRequestStatus(id: string, status: string) {
   const data = await requestJson<{ request: WebsiteRequest }>(`/developer/website-requests/${id}`, {
     method: "PATCH",

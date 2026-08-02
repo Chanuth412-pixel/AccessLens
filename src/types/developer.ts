@@ -22,6 +22,8 @@ export type WebsiteRequest = {
   request_count: number;
   created_at: string;
   updated_at: string;
+  template_id: string | null;
+  template_status: TemplateStatus | null;
 };
 
 

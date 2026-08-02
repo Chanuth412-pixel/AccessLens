@@ -1,5 +1,8 @@
 import { pool, query } from "../db.js";
-import { countPendingWebsiteRequests } from "./requestService.js";
+import {
+  countPendingWebsiteRequests,
+  fulfillWebsiteRequestForDomain
+} from "./requestService.js";
 import type { AccessLensField, AccessLensTemplate, TemplateStatus } from "../types.js";
 import type {
   DeveloperFieldMapping,
@@ -422,11 +425,17 @@ async function setTemplateStatus(
 }
 
 export async function approveDeveloperTemplate(templateId: string, note?: string) {
-  return setTemplateStatus(
+  const approved = await setTemplateStatus(
     templateId,
     "approved",
     note?.trim() || "Approved from Developer Console"
   );
+
+  if (approved) {
+    await fulfillWebsiteRequestForDomain(approved.site.base_domain);
+  }
+
+  return approved;
 }
 
 export async function rejectDeveloperTemplate(templateId: string, reason?: string) {
