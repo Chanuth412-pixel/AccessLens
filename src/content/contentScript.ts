@@ -625,6 +625,38 @@ function createInstructionPopup(instruction: AccessLensInstruction) {
   title.textContent = instruction.instruction_title;
   const text = document.createElement("p");
   text.textContent = instruction.instruction_text;
+  const aiSupportButton = document.createElement("button");
+  aiSupportButton.type = "button";
+  aiSupportButton.className = "accesslens-ai-support-toggle";
+  aiSupportButton.textContent = "Ask AI support";
+  aiSupportButton.setAttribute("aria-expanded", "false");
+
+  const aiSupport = document.createElement("div");
+  aiSupport.className = "accesslens-ai-support";
+  aiSupport.id = `accesslens-ai-support-${instruction.id}`;
+  aiSupport.hidden = true;
+  aiSupportButton.setAttribute("aria-controls", aiSupport.id);
+  const aiSupportLabel = document.createElement("label");
+  aiSupportLabel.textContent = "What part is difficult to understand?";
+  const aiSupportInput = document.createElement("textarea");
+  aiSupportInput.rows = 3;
+  aiSupportInput.maxLength = 500;
+  aiSupportInput.placeholder = "For example: I do not understand what documents I need.";
+  aiSupportInput.setAttribute("aria-describedby", `accesslens-ai-support-help-${instruction.id}`);
+  const aiSupportHelp = document.createElement("span");
+  aiSupportHelp.id = `accesslens-ai-support-help-${instruction.id}`;
+  aiSupportHelp.className = "accesslens-ai-support-help";
+  aiSupportHelp.textContent = "Do not include names, passwords, or other personal details.";
+  const explainButton = document.createElement("button");
+  explainButton.type = "button";
+  explainButton.className = "accesslens-ai-support-submit";
+  explainButton.textContent = "Explain simply";
+  const aiSupportStatus = document.createElement("div");
+  aiSupportStatus.className = "accesslens-ai-support-status";
+  aiSupportStatus.setAttribute("role", "status");
+  aiSupportStatus.setAttribute("aria-live", "polite");
+  aiSupportLabel.append(aiSupportInput);
+  aiSupport.append(aiSupportLabel, aiSupportHelp, explainButton, aiSupportStatus);
   const progress = document.createElement("div");
   progress.className = "accesslens-guide-progress";
   progress.setAttribute("role", "progressbar");
@@ -634,8 +666,67 @@ function createInstructionPopup(instruction: AccessLensInstruction) {
   const fill = document.createElement("span");
   fill.style.width = `${(instruction.step_order / instruction.total_workflow_steps) * 100}%`;
   progress.append(fill);
-  body.append(step, title, text, progress);
+  body.append(step, title, text, aiSupportButton, aiSupport, progress);
   popup.append(header, body);
+
+  aiSupportButton.addEventListener("click", () => {
+    const expanded = aiSupport.hidden;
+    aiSupport.hidden = !expanded;
+    aiSupportButton.setAttribute("aria-expanded", String(expanded));
+    aiSupportButton.textContent = expanded ? "Hide AI support" : "Ask AI support";
+
+    if (expanded) {
+      aiSupportInput.focus();
+    }
+  });
+
+  explainButton.addEventListener("click", async () => {
+    const question = aiSupportInput.value.trim();
+    if (!question) {
+      aiSupportStatus.className = "accesslens-ai-support-status accesslens-ai-support-error";
+      aiSupportStatus.textContent = "Please describe what is difficult to understand.";
+      aiSupportInput.focus();
+      return;
+    }
+
+    explainButton.disabled = true;
+    aiSupportInput.disabled = true;
+    explainButton.textContent = "Simplifying...";
+    aiSupportStatus.className = "accesslens-ai-support-status";
+    aiSupportStatus.textContent = "Creating a simple explanation...";
+
+    try {
+      const response = await apiFetch(
+        `${backendApiUrl}/instructions/${encodeURIComponent(instruction.id)}/ai-support`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: { question }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(await getApiError(response, "AI support could not explain this instruction."));
+      }
+
+      const data = await response.json() as { explanation?: string };
+      if (!data.explanation) {
+        throw new Error("AI support did not return an explanation.");
+      }
+
+      aiSupportStatus.className = "accesslens-ai-support-status accesslens-ai-support-answer";
+      aiSupportStatus.textContent = data.explanation;
+    } catch (error) {
+      aiSupportStatus.className = "accesslens-ai-support-status accesslens-ai-support-error";
+      aiSupportStatus.textContent = error instanceof Error
+        ? error.message
+        : "AI support is unavailable. Try again shortly.";
+    } finally {
+      explainButton.disabled = false;
+      aiSupportInput.disabled = false;
+      explainButton.textContent = "Explain simply";
+    }
+  });
 
   minimizeButton.addEventListener("click", () => {
     const minimized = !body.hidden;

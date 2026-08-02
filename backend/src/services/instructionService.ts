@@ -33,6 +33,11 @@ type FirstInstructionRow = InstructionRow & {
   total_workflow_steps: string | number;
 };
 
+export type InstructionForAiSupport = Pick<
+  InstructionResponse,
+  "instruction_title" | "instruction_text"
+>;
+
 export function normalizeHeading(value: string) {
   return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("en");
 }
@@ -186,4 +191,23 @@ export async function findFirstWorkflowInstruction(workflowKey: string) {
 
   const row = result.rows[0];
   return row ? toInstruction(row, Number(row.total_workflow_steps)) : null;
+}
+
+export async function findActiveInstructionForAiSupport(instructionId: string) {
+  const result = await query<InstructionForAiSupport>(
+    `
+      select
+        i.instruction_title,
+        i.instruction_text
+      from instructions i
+      join sites s on s.id = i.site_id
+      where i.id = $1
+        and i.is_active = true
+        and s.status = 'active'
+      limit 1
+    `,
+    [instructionId]
+  );
+
+  return result.rows[0] ?? null;
 }

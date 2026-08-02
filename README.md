@@ -168,6 +168,7 @@ After frontend or extension changes, run `npm run build`, reload the extension f
 | `GET` | `/api/templates/resolve?url=...&heading=...` | Resolve exactly one approved template by URL and normalized H1 |
 | `GET` | `/api/instructions/resolve?url=...&heading=...` | Resolve user-facing workflow guidance by URL and normalized H1 |
 | `GET` | `/api/instructions/workflows/:workflowKey/first` | Return the first active workflow instruction |
+| `POST` | `/api/instructions/:instructionId/ai-support` | Return a short AI simplification of an active instruction |
 | `POST` | `/api/ai/generate-template` | Generate or reuse a pending draft |
 | `GET` | `/api/developer/stats` | Read developer-console counts |
 | `GET` | `/api/developer/templates/pending` | List pending drafts |
