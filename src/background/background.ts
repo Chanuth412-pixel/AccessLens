@@ -1,3 +1,5 @@
+import type { WorkflowProgress } from "../types/instruction";
+
 type AccessLensWindowSession = {
   id: string;
   tabId: number;
@@ -17,10 +19,12 @@ type RuntimeMessage = {
   session?: Omit<AccessLensWindowSession, "id" | "tabId">;
   sessionId?: string;
   values?: Record<string, string>;
+  progress?: WorkflowProgress;
 };
 
 declare const chrome: {
   runtime: {
+    lastError?: { message?: string };
     getURL: (path: string) => string;
     onMessage: {
       addListener: (
@@ -33,12 +37,13 @@ declare const chrome: {
     };
   };
   storage: {
-    local: {
+    session: {
       get: (
         key: string,
-        callback: (items: Record<string, AccessLensWindowSession | undefined>) => void
+        callback: (items: Record<string, WorkflowProgress | undefined>) => void
       ) => void;
-      set: (items: Record<string, AccessLensWindowSession>, callback?: () => void) => void;
+      set: (items: Record<string, WorkflowProgress>, callback: () => void) => void;
+      remove: (key: string, callback: () => void) => void;
     };
   };
   tabs: {
@@ -56,6 +61,8 @@ declare const chrome: {
   };
 };
 
+const workflowProgressStorageKey = "accesslens-workflow-progress";
+
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -64,7 +71,47 @@ function getSessionKey(sessionId: string) {
   return `accesslens-window:${sessionId}`;
 }
 
+// Personal form values stay in extension memory only. Workflow ordering state is
+// stored separately by the content script and never includes these values.
+const windowSessions = new Map<string, AccessLensWindowSession>();
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "GET_WORKFLOW_PROGRESS") {
+    chrome.storage.session.get(workflowProgressStorageKey, (items) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not read workflow progress." });
+        return;
+      }
+
+      sendResponse({ ok: true, progress: items?.[workflowProgressStorageKey] ?? null });
+    });
+    return true;
+  }
+
+  if (message.type === "SAVE_WORKFLOW_PROGRESS" && message.progress) {
+    chrome.storage.session.set({ [workflowProgressStorageKey]: message.progress }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not save workflow progress." });
+        return;
+      }
+
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (message.type === "CLEAR_WORKFLOW_PROGRESS") {
+    chrome.storage.session.remove(workflowProgressStorageKey, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not clear workflow progress." });
+        return;
+      }
+
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (message.type === "FETCH_API" && message.url) {
     fetch(message.url, {
       method: message.method || "GET",
@@ -96,41 +143,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     const id = createSessionId();
     const session: AccessLensWindowSession = { ...message.session, id, tabId };
-    chrome.storage.local.set({ [getSessionKey(id)]: session }, () => {
-      chrome.windows.create({
-        url: chrome.runtime.getURL(`openPanel.html?sessionId=${encodeURIComponent(id)}`),
-        type: "popup",
-        width: 520,
-        height: 760,
-        focused: true
-      });
-      sendResponse({ ok: true, sessionId: id });
+    windowSessions.set(getSessionKey(id), session);
+    chrome.windows.create({
+      url: chrome.runtime.getURL(`openPanel.html?sessionId=${encodeURIComponent(id)}`),
+      type: "popup",
+      width: 520,
+      height: 760,
+      focused: true
     });
+    sendResponse({ ok: true, sessionId: id });
     return true;
   }
 
   if (message.type === "GET_ACCESSLENS_WINDOW_SESSION" && message.sessionId) {
-    chrome.storage.local.get(getSessionKey(message.sessionId), (items) => {
-      const session = items[getSessionKey(message.sessionId as string)];
-      sendResponse(session ? { ok: true, session } : { ok: false, error: "Session not found." });
-    });
+    const session = windowSessions.get(getSessionKey(message.sessionId));
+    sendResponse(session ? { ok: true, session } : { ok: false, error: "Session not found." });
     return true;
   }
 
   if (message.type === "ACCESSLENS_FILL_VALUES" && message.sessionId && message.values) {
-    chrome.storage.local.get(getSessionKey(message.sessionId), (items) => {
-      const session = items[getSessionKey(message.sessionId as string)];
-      if (!session) {
-        sendResponse({ ok: false, error: "Session not found." });
-        return;
-      }
+    const session = windowSessions.get(getSessionKey(message.sessionId));
+    if (!session) {
+      sendResponse({ ok: false, error: "Session not found." });
+      return;
+    }
 
-      chrome.tabs.sendMessage(
-        session.tabId,
-        { type: "ACCESSLENS_FILL_VALUES", values: message.values },
-        (response) => sendResponse(response ?? { ok: false, error: "Original page did not respond." })
-      );
-    });
+    chrome.tabs.sendMessage(
+      session.tabId,
+      { type: "ACCESSLENS_FILL_VALUES", values: message.values },
+      (response) => sendResponse(response ?? { ok: false, error: "Original page did not respond." })
+    );
     return true;
   }
 });

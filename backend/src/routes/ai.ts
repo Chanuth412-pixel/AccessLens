@@ -56,7 +56,10 @@ function isRateLimited(clientId: string) {
 aiRouter.post("/generate-template", async (request, response, next) => {
   try {
     const payload = generateTemplateRequestSchema.parse(request.body);
-    const existingDraft = await findReviewDraftTemplateByUrl(payload.url);
+    const allowedSelectors = new Set(
+      payload.elements.flatMap((element) => [element.selector, ...element.selectorCandidates])
+    );
+    const existingDraft = await findReviewDraftTemplateByUrl(payload.url, allowedSelectors);
 
     if (existingDraft) {
       response.json({

@@ -1,5 +1,6 @@
 import stylesText from "./contentStyles.css?inline";
 import type { AccessLensField, AccessLensTemplate } from "../types/accessLensTemplate";
+import type { AccessLensInstruction, WorkflowProgress } from "../types/instruction";
 
 const overlayId = "accesslens-overlay-root";
 const backendApiUrl = "http://localhost:4000/api";
@@ -331,11 +332,74 @@ declare const chrome: {
         headers?: Record<string, string>;
         body?: unknown;
         session?: unknown;
+        progress?: WorkflowProgress;
       },
-      callback: (response: { ok?: boolean; status?: number; data?: unknown; error?: string } | undefined) => void
+      callback: (response: {
+        ok?: boolean;
+        status?: number;
+        data?: unknown;
+        error?: string;
+        progress?: WorkflowProgress | null;
+      } | undefined) => void
     ) => void;
   };
 };
+
+function getWorkflowProgress() {
+  return new Promise<WorkflowProgress | null>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve(null);
+      return;
+    }
+
+    runtime.sendMessage({ type: "GET_WORKFLOW_PROGRESS" }, (response) => {
+      // Workflow state improves multi-page guidance but must never prevent the
+      // overlay itself from loading if extension storage is unavailable.
+      if (runtime.lastError || !response?.ok) {
+        resolve(null);
+        return;
+      }
+
+      resolve(response.progress ?? null);
+    });
+  });
+}
+
+function saveWorkflowProgress(progress: WorkflowProgress) {
+  return new Promise<void>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve();
+      return;
+    }
+
+    runtime.sendMessage({ type: "SAVE_WORKFLOW_PROGRESS", progress }, () => {
+      // Read runtime.lastError inside the callback so Chrome does not emit an
+      // unchecked runtime error when a tab or service worker is torn down.
+      void runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+function clearWorkflowProgress() {
+  return new Promise<void>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve();
+      return;
+    }
+
+    runtime.sendMessage({ type: "CLEAR_WORKFLOW_PROGRESS" }, () => {
+      void runtime.lastError;
+      resolve();
+    });
+  });
+}
 
 async function apiFetch(
   url: string,
@@ -387,6 +451,303 @@ async function apiFetch(
 async function getApiError(response: Response, fallback: string) {
   const data = await response.json().catch(() => null) as { error?: string } | null;
   return data?.error || fallback;
+}
+
+function getCurrentPageHeading() {
+  return normalizeText(document.querySelector("h1")?.textContent, 300);
+}
+
+async function resolveInstructionForCurrentPage() {
+  const heading = getCurrentPageHeading();
+
+  if (!heading) {
+    return null;
+  }
+
+  const response = await apiFetch(
+    `${backendApiUrl}/instructions/resolve?url=${encodeURIComponent(window.location.href)}&heading=${encodeURIComponent(heading)}`
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(await getApiError(response, "AccessLens could not resolve page guidance."));
+  }
+
+  const data = await response.json() as { instruction: AccessLensInstruction };
+  return data.instruction;
+}
+
+async function getFirstWorkflowInstruction(workflowKey: string) {
+  const response = await apiFetch(
+    `${backendApiUrl}/instructions/workflows/${encodeURIComponent(workflowKey)}/first`
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json() as { instruction: AccessLensInstruction };
+  return data.instruction;
+}
+
+type WorkflowPageAccess = {
+  progress: WorkflowProgress;
+  outOfOrder: boolean;
+  requiredStepText: string;
+  returnUrl: string;
+};
+
+async function evaluateWorkflowPage(instruction: AccessLensInstruction): Promise<WorkflowPageAccess> {
+  const savedProgress = await getWorkflowProgress();
+
+  if (!savedProgress || savedProgress.workflowKey !== instruction.workflow_key) {
+    if (instruction.step_order === 1) {
+      const progress: WorkflowProgress = {
+        workflowKey: instruction.workflow_key,
+        completedStepOrder: 0,
+        expectedPageKeys: [instruction.page_key],
+        currentPageKey: instruction.page_key,
+        lastValidUrl: window.location.href,
+        currentStepReady: false
+      };
+      await saveWorkflowProgress(progress);
+      return {
+        progress,
+        outOfOrder: false,
+        requiredStepText: `Step 1 (${instruction.page_key})`,
+        returnUrl: instruction.page_url
+      };
+    }
+
+    const firstInstruction = await getFirstWorkflowInstruction(instruction.workflow_key);
+    const progress: WorkflowProgress = {
+      workflowKey: instruction.workflow_key,
+      completedStepOrder: 0,
+      expectedPageKeys: firstInstruction ? [firstInstruction.page_key] : [],
+      currentPageKey: "",
+      lastValidUrl: firstInstruction?.page_url ?? instruction.page_url,
+      currentStepReady: false
+    };
+
+    return {
+      progress,
+      outOfOrder: instruction.block_out_of_order,
+      requiredStepText: firstInstruction
+        ? `Step ${firstInstruction.step_order} (${firstInstruction.page_key})`
+        : "the first workflow step",
+      returnUrl: firstInstruction?.page_url ?? instruction.page_url
+    };
+  }
+
+  const isRefresh = savedProgress.currentPageKey === instruction.page_key;
+  const isCompletedEarlierPage = instruction.step_order <= savedProgress.completedStepOrder;
+  const isExpectedPage = savedProgress.expectedPageKeys.includes(instruction.page_key);
+  const allowed = isRefresh || isCompletedEarlierPage || isExpectedPage;
+
+  if (!allowed && instruction.block_out_of_order) {
+    const nextStepOrder = Math.min(
+      savedProgress.completedStepOrder + 1,
+      instruction.total_workflow_steps
+    );
+    const expectedKeys = savedProgress.expectedPageKeys.join(" or ");
+    return {
+      progress: savedProgress,
+      outOfOrder: true,
+      requiredStepText: expectedKeys
+        ? `Step ${nextStepOrder} (${expectedKeys})`
+        : `Step ${nextStepOrder}`,
+      returnUrl: savedProgress.lastValidUrl || instruction.page_url
+    };
+  }
+
+  const progress: WorkflowProgress = {
+    ...savedProgress,
+    currentPageKey: instruction.page_key,
+    lastValidUrl: window.location.href,
+    // Form values are intentionally not persisted, so a fresh document must be
+    // reviewed and filled again even when it is a refresh of the valid page.
+    currentStepReady: false
+  };
+  await saveWorkflowProgress(progress);
+
+  return {
+    progress,
+    outOfOrder: false,
+    requiredStepText: `Step ${instruction.step_order} (${instruction.page_key})`,
+    returnUrl: progress.lastValidUrl
+  };
+}
+
+function createInstructionPopup(instruction: AccessLensInstruction) {
+  const popup = document.createElement("aside");
+  popup.className = "accesslens-guide";
+  popup.setAttribute("aria-label", "AccessLens guided process instruction");
+
+  const header = document.createElement("div");
+  header.className = "accesslens-guide-header";
+  const brand = document.createElement("div");
+  brand.className = "accesslens-guide-brand";
+  const logo = document.createElement("span");
+  logo.className = "accesslens-logo-mark";
+  logo.textContent = "AL";
+  const brandText = document.createElement("div");
+  const name = document.createElement("strong");
+  name.textContent = "AccessLens";
+  const eyebrow = document.createElement("span");
+  eyebrow.textContent = "Guided process";
+  brandText.append(name, eyebrow);
+  brand.append(logo, brandText);
+
+  const controls = document.createElement("div");
+  controls.className = "accesslens-guide-controls";
+  const minimizeButton = document.createElement("button");
+  minimizeButton.type = "button";
+  minimizeButton.className = "accesslens-icon-button";
+  minimizeButton.setAttribute("aria-label", "Minimize instruction");
+  minimizeButton.textContent = "−";
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "accesslens-icon-button";
+  closeButton.setAttribute("aria-label", "Close instruction");
+  closeButton.textContent = "×";
+  controls.append(minimizeButton, closeButton);
+  header.append(brand, controls);
+
+  const body = document.createElement("div");
+  body.className = "accesslens-guide-body";
+  const step = document.createElement("div");
+  step.className = "accesslens-guide-step";
+  step.textContent = `Step ${instruction.step_order} of ${instruction.total_workflow_steps}`;
+  const title = document.createElement("h2");
+  title.textContent = instruction.instruction_title;
+  const text = document.createElement("p");
+  text.textContent = instruction.instruction_text;
+  const progress = document.createElement("div");
+  progress.className = "accesslens-guide-progress";
+  progress.setAttribute("role", "progressbar");
+  progress.setAttribute("aria-valuemin", "1");
+  progress.setAttribute("aria-valuemax", String(instruction.total_workflow_steps));
+  progress.setAttribute("aria-valuenow", String(instruction.step_order));
+  const fill = document.createElement("span");
+  fill.style.width = `${(instruction.step_order / instruction.total_workflow_steps) * 100}%`;
+  progress.append(fill);
+  body.append(step, title, text, progress);
+  popup.append(header, body);
+
+  minimizeButton.addEventListener("click", () => {
+    const minimized = !body.hidden;
+    body.hidden = minimized;
+    minimizeButton.textContent = minimized ? "+" : "−";
+    minimizeButton.setAttribute("aria-label", minimized ? "Expand instruction" : "Minimize instruction");
+  });
+  closeButton.addEventListener("click", () => popup.remove());
+
+  return popup;
+}
+
+function attachBlockingSubmitGuard(onBlocked: () => void) {
+  const handler = (event: SubmitEvent) => {
+    if (!isManualContinueForm(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    onBlocked();
+  };
+  document.addEventListener("submit", handler, true);
+  return () => document.removeEventListener("submit", handler, true);
+}
+
+function isManualContinueForm(target: EventTarget | null) {
+  if (!(target instanceof HTMLFormElement)) {
+    return false;
+  }
+
+  return Array.from(target.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
+    'button[type="submit"], input[type="submit"], button:not([type])'
+  )).some((control) => normalizeText(
+    control instanceof HTMLInputElement ? control.value : control.textContent
+  ).toLocaleLowerCase("en") === "continue");
+}
+
+function createOutOfOrderWarning(
+  instruction: AccessLensInstruction,
+  requiredStepText: string,
+  returnUrl: string
+) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "accesslens-blocking-backdrop";
+  const modal = document.createElement("section");
+  modal.className = "accesslens-warning-modal";
+  modal.setAttribute("role", "alertdialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", "AccessLens workflow order warning");
+  const badge = document.createElement("span");
+  badge.className = "accesslens-warning-badge";
+  badge.textContent = "Out of order";
+  const title = document.createElement("h2");
+  title.textContent = "Complete the required step first";
+  const message = document.createElement("p");
+  message.textContent = instruction.out_of_order_message;
+  const required = document.createElement("p");
+  required.className = "accesslens-required-step";
+  required.textContent = `Required first: ${requiredStepText}`;
+  const returnButton = document.createElement("button");
+  returnButton.type = "button";
+  returnButton.className = "accesslens-primary-button";
+  returnButton.textContent = "Return to required step";
+  returnButton.addEventListener("click", () => {
+    if (new URL(returnUrl).href === window.location.href && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    window.location.assign(returnUrl);
+  });
+  modal.append(badge, title, message, required, returnButton);
+  backdrop.append(modal);
+  return backdrop;
+}
+
+function createCompletionPanel() {
+  const panel = createStatusPanel(
+    "AccessLens guide complete",
+    "You completed every guided step. Your personal values were not saved by AccessLens."
+  );
+  panel.classList.add("accesslens-completion-panel");
+  const finishButton = document.createElement("button");
+  finishButton.type = "button";
+  finishButton.className = "accesslens-primary-button";
+  finishButton.textContent = "Finish AccessLens Guide";
+  finishButton.addEventListener("click", () => {
+    const rootNode = panel.getRootNode();
+    if (rootNode instanceof ShadowRoot) {
+      rootNode.host.remove();
+    }
+  });
+  panel.append(finishButton);
+  return panel;
+}
+
+function showSubmissionBlockedWarning(shadowRoot: ShadowRoot, messageElement?: HTMLElement) {
+  const warningText = "Complete and confirm this AccessLens step before continuing.";
+  if (messageElement) {
+    messageElement.className = "accesslens-message accesslens-message-error";
+    messageElement.textContent = warningText;
+  }
+
+  let toast = shadowRoot.querySelector<HTMLElement>(".accesslens-submit-warning");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "accesslens-submit-warning";
+    toast.setAttribute("role", "alert");
+    shadowRoot.append(toast);
+  }
+  toast.textContent = warningText;
 }
 
 function withRuntimeSafetyDefaults(template: AccessLensTemplate) {
@@ -465,6 +826,7 @@ async function generateAiTemplate() {
     body: {
       url: window.location.href,
       title: normalizeText(document.title, 300),
+      heading: getCurrentPageHeading(),
       language: normalizeText(
         document.documentElement.lang || navigator.language || "unknown",
         30
@@ -491,7 +853,7 @@ async function generateAiTemplate() {
 
 async function resolveTemplateForCurrentPage(): Promise<ResolvedTemplate> {
   const response = await apiFetch(
-    `${backendApiUrl}/templates/match?url=${encodeURIComponent(window.location.href)}`
+    `${backendApiUrl}/templates/resolve?url=${encodeURIComponent(window.location.href)}&heading=${encodeURIComponent(getCurrentPageHeading())}`
   );
 
   if (response.ok) {
@@ -499,8 +861,16 @@ async function resolveTemplateForCurrentPage(): Promise<ResolvedTemplate> {
     return { template: data.template, source: "approved", saved: true };
   }
 
-  if (response.status !== 404) {
-    throw new Error(await getApiError(response, "AccessLens could not reach the template backend."));
+  const errorData = await response.json().catch(() => null) as {
+    error?: string;
+    code?: string;
+  } | null;
+  if (
+    errorData?.code === "KNOWN_SITE_PAGE_NOT_CONFIGURED"
+    || errorData?.code === "AMBIGUOUS_TEMPLATE_MATCH"
+    || response.status !== 404
+  ) {
+    throw new Error(errorData?.error || "AccessLens could not resolve an approved page template.");
   }
 
   const generated = await generateAiTemplate();
@@ -570,7 +940,53 @@ function validateValues(values: Record<string, string>, fields: AccessLensField[
     .filter((field) => field.required && !values[field.id]?.trim())
     .map((field) => translateFieldLabel(field.label, language));
 
-  return missingFields.length === 0 ? "" : `${t(language, "pleaseEnter")}: ${missingFields.join(", ")}.`;
+  if (missingFields.length > 0) {
+    return `${t(language, "pleaseEnter")}: ${missingFields.join(", ")}.`;
+  }
+
+  for (const field of fields) {
+    const value = values[field.id]?.trim() ?? "";
+    if (!value || !field.validationPattern) {
+      continue;
+    }
+
+    try {
+      if (!new RegExp(field.validationPattern).test(value)) {
+        return field.validationMessage
+          ?? `${translateFieldLabel(field.label, language)} is not valid.`;
+      }
+    } catch {
+      return `${translateFieldLabel(field.label, language)} has an invalid validation rule.`;
+    }
+  }
+
+  return "";
+}
+
+function validateInstructionValues(
+  values: Record<string, string>,
+  instruction: AccessLensInstruction | null
+) {
+  if (!instruction) {
+    return "";
+  }
+
+  const requiredCount = Number(instruction.completion_rule.required_field_count ?? 0);
+  const enteredValues = Object.values(values).filter((value) => value.trim() !== "");
+  if (requiredCount > 0 && enteredValues.length < requiredCount) {
+    return `Complete all ${requiredCount} required fields before reviewing this step.`;
+  }
+
+  const prototypeRule = instruction.completion_rule.prototype_linear_path;
+  if (prototypeRule && typeof prototypeRule === "object" && "field_minimum" in prototypeRule) {
+    const minimum = Number((prototypeRule as { field_minimum: unknown }).field_minimum);
+    const numericValue = Number(enteredValues[0]);
+    if (Number.isFinite(minimum) && (!Number.isFinite(numericValue) || numericValue < minimum)) {
+      return `Enter ${minimum} or more to follow this prototype workflow.`;
+    }
+  }
+
+  return "";
 }
 
 function setNativeValue(element: FormControl, value: string) {
@@ -835,6 +1251,81 @@ async function injectOverlay() {
   const loadingPanel = createStatusPanel("AccessLens", "Checking this page and preparing its form...");
   shadowRoot.append(loadingPanel);
 
+  let instruction: AccessLensInstruction | null = null;
+  let workflowAccess: WorkflowPageAccess | null = null;
+  let workflowProgress: WorkflowProgress | null = null;
+  let workflowMessage: HTMLElement | undefined;
+
+  try {
+    instruction = await resolveInstructionForCurrentPage();
+    const existingProgress = await getWorkflowProgress();
+
+    if (
+      !instruction
+      && existingProgress
+      && existingProgress.completedStepOrder > 0
+      && existingProgress.expectedPageKeys.length === 0
+    ) {
+      await clearWorkflowProgress();
+      loadingPanel.remove();
+      shadowRoot.append(createCompletionPanel());
+      return;
+    }
+
+    if (instruction) {
+      workflowAccess = await evaluateWorkflowPage(instruction);
+      if (workflowAccess.outOfOrder) {
+        loadingPanel.remove();
+        const warning = createOutOfOrderWarning(
+          instruction,
+          workflowAccess.requiredStepText,
+          workflowAccess.returnUrl
+        );
+        attachBlockingSubmitGuard(() => {
+          const required = warning.querySelector<HTMLElement>(".accesslens-required-step");
+          required?.focus();
+        });
+        shadowRoot.append(warning);
+        return;
+      }
+
+      workflowProgress = workflowAccess.progress;
+      if (instruction.completion_rule.completes_workflow !== true) {
+        document.addEventListener("submit", (event) => {
+          if (event.composedPath().includes(root) || !isManualContinueForm(event.target)) {
+            return;
+          }
+
+          if (!workflowProgress?.currentStepReady) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            showSubmissionBlockedWarning(shadowRoot, workflowMessage);
+            return;
+          }
+
+          workflowProgress = {
+            workflowKey: instruction!.workflow_key,
+            completedStepOrder: instruction!.step_order,
+            expectedPageKeys: [...instruction!.allowed_next_page_keys],
+            currentPageKey: instruction!.page_key,
+            lastValidUrl: window.location.href,
+            currentStepReady: false
+          };
+          void saveWorkflowProgress(workflowProgress);
+        }, true);
+      }
+      shadowRoot.append(createInstructionPopup(instruction));
+    }
+  } catch (error) {
+    loadingPanel.remove();
+    shadowRoot.append(createStatusPanel(
+      "AccessLens guidance unavailable",
+      error instanceof Error ? error.message : "AccessLens could not load workflow guidance.",
+      true
+    ));
+    return;
+  }
+
   let resolved: ResolvedTemplate;
 
   try {
@@ -863,6 +1354,12 @@ async function injectOverlay() {
   const { template, source } = resolved;
   const fields = template.fields.filter((field) => field.type !== "password");
   const isRuntimeAiTemplate = source !== "approved";
+
+  if (fields.length === 0 && instruction?.completion_rule.completes_workflow === true) {
+    await clearWorkflowProgress();
+    shadowRoot.append(createCompletionPanel());
+    return;
+  }
 
   let viewMode: ViewMode = "wizard";
   let language: Language = "en";
@@ -976,6 +1473,7 @@ async function injectOverlay() {
   const message = document.createElement("p");
   message.className = "accesslens-message";
   message.setAttribute("role", "status");
+  workflowMessage = message;
 
   const form = document.createElement("form");
   form.className = "accesslens-form";
@@ -1005,6 +1503,19 @@ async function injectOverlay() {
   panelBody.append(languageSwitcher, description, modeSwitcher, form, message);
   panel.append(titlebar, panelBody);
   shadowRoot.append(panel);
+
+  const setCurrentStepReady = (ready: boolean) => {
+    if (!instruction || !workflowProgress) {
+      return;
+    }
+
+    workflowProgress = {
+      ...workflowProgress,
+      currentPageKey: instruction.page_key,
+      currentStepReady: ready
+    };
+    void saveWorkflowProgress(workflowProgress);
+  };
 
   themeToggleBtn.addEventListener("click", () => {
     isDarkMode = !isDarkMode;
@@ -1094,7 +1605,8 @@ async function injectOverlay() {
 
   const handleReviewFlow = () => {
     syncStateFromDom();
-    const validationError = validateValues(formValuesState, fields, language);
+    const validationError = validateValues(formValuesState, fields, language)
+      || validateInstructionValues(formValuesState, instruction);
     message.className = "accesslens-message";
     resultContainer.replaceChildren();
 
@@ -1111,7 +1623,8 @@ async function injectOverlay() {
 
     confirmButton.addEventListener("click", () => {
       syncStateFromDom();
-      const latestValidationError = validateValues(formValuesState, fields, language);
+      const latestValidationError = validateValues(formValuesState, fields, language)
+        || validateInstructionValues(formValuesState, instruction);
       message.className = "accesslens-message";
       resultContainer.replaceChildren();
 
@@ -1126,6 +1639,7 @@ async function injectOverlay() {
       resultContainer.append(createResultList(results));
       message.classList.add(hasErrors ? "accesslens-message-error" : "accesslens-message-success");
       message.textContent = hasErrors ? t(language, "fillWarning") : t(language, "fillSuccess");
+      setCurrentStepReady(!hasErrors);
     });
 
     reviewContainer.replaceChildren(createReviewDetails(formValuesState, fields, language), confirmButton);
@@ -1156,6 +1670,7 @@ async function injectOverlay() {
         }
         input.addEventListener("input", (e) => {
           formValuesState[field.id] = (e.target as FormControl).value.trim();
+          setCurrentStepReady(false);
         });
         formContentContainer.append(wrapper);
       });
@@ -1228,6 +1743,7 @@ async function injectOverlay() {
       }
       input.addEventListener("input", (e) => {
         formValuesState[currentField.id] = (e.target as FormControl).value.trim();
+        setCurrentStepReady(false);
       });
 
       const hint = document.createElement("p");
@@ -1346,6 +1862,7 @@ async function injectOverlay() {
       hasErrors ? "accesslens-message-error" : "accesslens-message-success"
     }`;
     message.textContent = hasErrors ? t(language, "fillWarning") : t(language, "fillSuccess");
+    setCurrentStepReady(!hasErrors);
     sendResponse({ ok: !hasErrors, results });
   });
 

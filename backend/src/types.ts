@@ -8,6 +8,8 @@ export type AccessLensField = {
   xpath?: string;
   required?: boolean;
   validationRule?: string;
+  validationPattern?: string;
+  validationMessage?: string;
   options?: string[];
   originalLabel?: string;
   confidence?: number;
@@ -26,11 +28,23 @@ export type RunnerInstruction = {
 };
 
 export type AccessLensTemplate = {
-  source?: "approved" | "ai-runtime-generated";
+  source?: "approved" | "manually-approved" | "ai-runtime-generated";
   siteId: string;
   siteName: string;
   templateKey: string;
   templateName: string;
+  pageHeading?: string;
+  pageDetection?: {
+    headingText: string;
+    requiredSelectors: string[];
+  };
+  workflow?: {
+    workflowKey: string;
+    pageKey: string;
+    pageOrder: number;
+    totalPages: number;
+    nextPageKey: string | null;
+  };
   version: string;
   urlPatterns: string[];
   fields: AccessLensField[];

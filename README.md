@@ -164,7 +164,10 @@ After frontend or extension changes, run `npm run build`, reload the extension f
 | --- | --- | --- |
 | `GET` | `/api/health` | Check API and database health |
 | `GET` | `/api/templates` | List approved templates |
-| `GET` | `/api/templates/match?url=...` | Match an approved template to a page |
+| `GET` | `/api/templates/match?url=...` | Legacy URL-only approved-template match |
+| `GET` | `/api/templates/resolve?url=...&heading=...` | Resolve exactly one approved template by URL and normalized H1 |
+| `GET` | `/api/instructions/resolve?url=...&heading=...` | Resolve user-facing workflow guidance by URL and normalized H1 |
+| `GET` | `/api/instructions/workflows/:workflowKey/first` | Return the first active workflow instruction |
 | `POST` | `/api/ai/generate-template` | Generate or reuse a pending draft |
 | `GET` | `/api/developer/stats` | Read developer-console counts |
 | `GET` | `/api/developer/templates/pending` | List pending drafts |

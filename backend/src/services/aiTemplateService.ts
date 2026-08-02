@@ -70,6 +70,7 @@ function buildAiMessages(request: GenerateTemplateRequest) {
         page: {
           url: request.url,
           title: request.title,
+          heading: request.heading,
           language: request.language
         },
         elements: request.elements
@@ -152,13 +153,15 @@ function buildTemplate(
     throw new Error("The AI response did not contain selectors from the supplied page snapshot.");
   }
 
-  const pathHash = createHash("sha256").update(pageUrl.pathname).digest("hex").slice(0, 12);
+  const pageIdentity = `${pageUrl.pathname}\n${request.heading ?? request.title}`;
+  const pathHash = createHash("sha256").update(pageIdentity).digest("hex").slice(0, 12);
   const template: AccessLensTemplate = {
     source: "ai-runtime-generated",
     siteId,
     siteName: generated.siteName.trim().slice(0, 200) || pageUrl.hostname,
     templateKey: `${siteId}:${pathHash}`,
     templateName: generated.templateName.trim().slice(0, 200) || request.title || "AI form draft",
+    pageHeading: request.heading?.trim().slice(0, 300) || undefined,
     version: "0.1.0-ai",
     urlPatterns: [createUrlPattern(pageUrl)],
     fields,
