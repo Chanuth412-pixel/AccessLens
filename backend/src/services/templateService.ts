@@ -86,6 +86,12 @@ export function matchApprovedTemplateCandidates(
   });
 }
 
+function matchApprovedTemplatesByUrl(rows: TemplateRow[], url: string) {
+  return rows.filter((row) =>
+    row.template_json.urlPatterns.some((pattern) => urlMatchesPattern(url, pattern))
+  );
+}
+
 async function hydrateApprovedTemplate(row: TemplateRow) {
   const [fieldResult, instructionResult] = await Promise.all([
     query<FieldMappingRow>(
@@ -126,9 +132,8 @@ async function hydrateApprovedTemplate(row: TemplateRow) {
     )
   ]);
 
-  return {
-    ...row.template_json,
-    fields: fieldResult.rows.map((field) => ({
+  const fields = fieldResult.rows.length > 0
+    ? fieldResult.rows.map((field) => ({
       id: field.field_key,
       label: field.label,
       type: field.input_type,
@@ -143,8 +148,11 @@ async function hydrateApprovedTemplate(row: TemplateRow) {
         : undefined,
       confidence: 1,
       events: ["input" as const, "change" as const]
-    })),
-    instructions: instructionResult.rows.map((instruction) => ({
+    }))
+    : row.template_json.fields;
+
+  const instructions = instructionResult.rows.length > 0
+    ? instructionResult.rows.map((instruction) => ({
       type: instruction.instruction_type,
       fieldId: instruction.field_key ?? undefined,
       selector: instruction.selector ?? undefined,
@@ -153,10 +161,16 @@ async function hydrateApprovedTemplate(row: TemplateRow) {
       waitMs: instruction.wait_ms ?? undefined,
       metadata: instruction.metadata_json ?? undefined
     }))
+    : row.template_json.instructions;
+
+  return {
+    ...row.template_json,
+    fields,
+    instructions
   } satisfies AccessLensTemplate;
 }
 
-export async function resolveApprovedTemplateForPage(urlValue: string, heading: string) {
+export async function resolveApprovedTemplateForPage(urlValue: string, heading?: string) {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(urlValue);
@@ -189,25 +203,35 @@ export async function resolveApprovedTemplateForPage(urlValue: string, heading: 
     `,
     [siteIds]
   );
-  const matches = matchApprovedTemplateCandidates(result.rows, parsedUrl.href, heading);
+  const urlMatches = matchApprovedTemplatesByUrl(result.rows, parsedUrl.href);
 
-  if (matches.length === 0) {
+  if (urlMatches.length === 0) {
     throw new TemplateResolutionError(
       "KNOWN_SITE_PAGE_NOT_CONFIGURED",
-      "This site is known, but this page and heading are not configured in AccessLens",
+      "This site is known, but this page is not configured in AccessLens",
       404
     );
   }
 
-  if (matches.length > 1) {
+  if (urlMatches.length === 1) {
+    return hydrateApprovedTemplate(urlMatches[0]);
+  }
+
+  const headingMatches = heading
+    ? matchApprovedTemplateCandidates(urlMatches, parsedUrl.href, heading)
+    : [];
+
+  if (headingMatches.length !== 1) {
     throw new TemplateResolutionError(
       "AMBIGUOUS_TEMPLATE_MATCH",
-      "More than one approved template matches this URL and heading",
+      headingMatches.length > 1
+        ? "More than one approved template matches this URL and heading"
+        : "More than one approved template matches this URL and none matches this page heading",
       409
     );
   }
 
-  return hydrateApprovedTemplate(matches[0]);
+  return hydrateApprovedTemplate(headingMatches[0]);
 }
 
 export async function findApprovedTemplateByUrl(url: string, heading?: string) {

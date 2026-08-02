@@ -1452,6 +1452,15 @@ async function injectOverlay() {
     return;
   }
 
+  if (fields.length === 0) {
+    shadowRoot.append(createStatusPanel(
+      "AccessLens",
+      "This approved template does not contain any supported form fields.",
+      true
+    ));
+    return;
+  }
+
   let viewMode: ViewMode = "wizard";
   let language: Language = "en";
   let currentStepIndex = 0;

@@ -50,11 +50,6 @@ templatesRouter.get("/resolve", async (request, response, next) => {
       return;
     }
 
-    if (!heading) {
-      response.status(400).json({ error: "Missing required query parameter: heading" });
-      return;
-    }
-
     const template = await resolveApprovedTemplateForPage(url, heading);
     response.json({ template });
   } catch (error) {
