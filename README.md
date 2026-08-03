@@ -228,7 +228,7 @@ AccessLens/
 └── vite.config.ts        Multi-entry extension build
 ```
 
-For a deeper explanation of component boundaries and data handling, see [the architecture notes](docs/frontend-backend-database.md).
+For a deeper explanation of component boundaries and data handling, see [the architecture notes](docs/frontend-backend-database.md) and [the multi-step workflow guidance documentation](docs/workflows-and-guidance.md).
 
 ## Production checklist
 
