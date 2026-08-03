@@ -8,7 +8,24 @@
   A privacy-first Chrome extension that turns complex public-service forms into a simpler, bilingual, review-before-fill experience.
 </p>
 
-AccessLens detects a supported form, loads an approved field-mapping template, and presents the same questions in a clearer interface. A user can complete the simplified form in an overlay, a step-by-step wizard, or a separate window. AccessLens fills the original page only after confirmation and never submits it automatically.
+The Problem It Solves
+
+Government websites for tasks like passport renewal, business registration, and tax filing can be difficult to use. Many people depend on YouTube videos, blogs, or online forums to understand what to do.
+
+This creates several problems:
+
+Tutorials can become outdated when the website layout, field names, or requirements change.
+Videos and blogs cannot understand the exact problem a user is facing.
+Switching between the government website and a tutorial can cause confusion, mistakes, and session timeouts.
+What AccessLens Does
+
+AccessLens provides instructions directly on the government website while the user is completing the form.
+
+It gives step-by-step guidance on the actual page, so users do not need separate YouTube videos or blogs.
+It makes sure users complete the steps in the correct order. If a step is skipped, it shows a message and guides the user back.
+It includes an AI assistant that understands the user’s current step and the full application process, allowing it to give more accurate and relevant answers.
+
+ AccessLens also detects a supported form, loads an approved field-mapping template, and presents the same questions in a clearer interface. A user can complete the simplified form in an overlay, a step-by-step wizard, or a separate window. AccessLens fills the original page only after confirmation and never submits it automatically.
 
 When a site has no approved template, the extension offers a website-support request instead of generating a user-side AI template. A developer can generate a draft from the request, review it, and approve it before it becomes normal site support.
 
