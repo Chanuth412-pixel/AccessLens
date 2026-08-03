@@ -8,16 +8,17 @@
   A privacy-first Chrome extension that turns complex public-service forms into a simpler, bilingual, review-before-fill experience.
 </p>
 
-The Problem It Solves
+## The Problem It Solves
 
 Government websites for tasks like passport renewal, business registration, and tax filing can be difficult to use. Many people depend on YouTube videos, blogs, or online forums to understand what to do.
 
-This creates several problems:
+## This creates several problems:
 
 Tutorials can become outdated when the website layout, field names, or requirements change.
 Videos and blogs cannot understand the exact problem a user is facing.
 Switching between the government website and a tutorial can cause confusion, mistakes, and session timeouts.
-What AccessLens Does
+
+## What AccessLens Does
 
 AccessLens provides instructions directly on the government website while the user is completing the form.
 
