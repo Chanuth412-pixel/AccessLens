@@ -10,7 +10,8 @@
 
 ## The Problem It Solves
 
-Government websites for tasks like passport renewal, business registration, and tax filing can be difficult to use. Many people depend on YouTube videos, blogs, or online forums to understand what to do.
+In Sri Lanka specially Government websites for services like passport renewal, business registration, and tax filing can be hard to use. Many people use YouTube videos, blogs, or online forums to understand what to do. This creates several problems:
+
 
 ## This creates several problems:
 
@@ -20,31 +21,19 @@ Switching between the government website and a tutorial can cause confusion, mis
 
 ## What AccessLens Does
 
-AccessLens provides instructions directly on the government website while the user is completing the form.
+AccessLens finds supported forms, such as forms on `gov.lk`, and shows them in a simpler interface in both English and Sinhala. It gives help directly on the website, so users do not need separate tutorials.
 
-It gives step-by-step guidance on the actual page, so users do not need separate YouTube videos or blogs.
-It makes sure users complete the steps in the correct order. If a step is skipped, it shows a message and guides the user back.
-It includes an AI assistant that understands the user’s current step and the full application process, allowing it to give more accurate and relevant answers.
+### Core Features
 
- AccessLens also detects a supported form, loads an approved field-mapping template, and presents the same questions in a clearer interface. A user can complete the simplified form in an overlay, a step-by-step wizard, or a separate window. AccessLens fills the original page only after confirmation and never submits it automatically.
-
-When a site has no approved template, the extension offers a website-support request instead of generating a user-side AI template. A developer can generate a draft from the request, review it, and approve it before it becomes normal site support.
+- **Guidance on the Website:** Gives step-by-step instructions while the user is filling out the form.
+- **Correct Step Order:** Makes sure users complete each page in the correct order. If a step is skipped, it shows a message and guides the user back.
+- **Smart AI Help:** Includes an AI assistant that understands the user’s current step and the full application process. This helps it give accurate and useful answers.
+- **Different Display Options:** Lets users see all fields at once or complete the form one step at a time. It supports English and Sinhala and can appear on the same page or in a separate window.
+- **Protects User Privacy:** Adds the user’s information to the original form only after the user confirms it. It does not submit the form automatically.
+- **Tools for Developers:** Uses approved PostgreSQL templates to reduce unnecessary AI use. For forms it does not know, it creates a privacy-safe draft and sends it to a developer dashboard for checking, editing, and approval.
 
 > [!IMPORTANT]
 > AccessLens is a prototype. The developer API currently has a placeholder authentication guard and must not be exposed publicly without real authentication and authorization.
-
-## What it does
-
-- Detects supported forms on `gov.lk`, local test pages, and the Selenium demo form.
-- Offers all-fields and step-by-step form modes.
-- Supports English and Sinhala UI text.
-- Opens the simplified form in a separate window when preferred.
-- Fills native inputs and dispatches the expected browser events.
-- Flags low-confidence mappings for manual attention.
-- Requires review before filling and leaves final submission to the user.
-- Reuses approved PostgreSQL templates without an AI call.
-- Generates privacy-filtered AI drafts for unknown forms and holds them for review.
-- Provides a developer console for editing, validating, approving, or rejecting drafts.
 
 ## How it works
 
@@ -57,7 +46,32 @@ The extension sends the backend only structural form metadata such as labels, ty
 <p align="center">
   <img src="docs/images/accesslens-workflow.svg" alt="AccessLens template workflow from page detection through approved template lookup, AI draft generation, developer review, and user-confirmed form filling" width="100%" />
 </p>
+AccessLens operates through a secure, three-tier architecture comprising a Chrome Extension (Content Script), a Node.js/Express API, and a PostgreSQL database. The core philosophy of the system is **structural mapping without remote data transmission**.
 
+### 1. Form Detection & Metadata Extraction
+When a user navigates to a web page, the extension's `contentScript.ts` scans the DOM. It extracts only the **structural metadata** of the form—such as input types, labels, required flags, ARIA attributes, and CSS selectors. It strictly ignores and isolates any personal values entered by the user.
+
+### 2. Template & Workflow Resolution
+The extension sends the page URL and normalized headings to the backend API via endpoints like `/api/templates/resolve` and `/api/instructions/resolve`. 
+* **If a match exists:** The PostgreSQL database returns an approved field-mapping template and the associated multi-step workflow instructions.
+* **If no match exists:** The extension gracefully falls back, offering the user the option to submit a website support request.
+
+### 3. Secure UI Injection & Workflow Tracking
+Once a template is resolved, the extension renders a simplified React-based overlay or wizard using Shadow DOM to prevent CSS leakage or conflicts with the host government page.
+* **State Management:** It uses encrypted browser local storage (`WorkflowProgress`) to track completed steps, preventing out-of-order execution.
+* **Filling, Not Submitting:** When the user completes the simplified UI, the extension maps their local inputs to the original form's CSS selectors and dispatches native browser events. The final submission action is intentionally left to the user.
+
+### 4. Path-Aware AI Context
+When a user requests AI assistance for a confusing step, the extension does not send their form data. Instead, it calls `/api/instructions/:instructionId/ai-support`. The backend queries the database for the *entire* instruction pathway (Step 1 to N) and passes this structural context to the LLM (via Groq or OpenAI). This allows the AI to provide step-specific guidance without ever exposing personal data.
+
+### 5. The Developer Loop (Draft Generation & Approval)
+To support new government portals safely, AccessLens uses a human-in-the-loop developer console:
+1. The backend securely strips all potential PII from a requested site's structural snapshot.
+2. It sends this sanitized structure to the AI provider to generate a draft mapping.
+3. The draft is saved in PostgreSQL with a `pending_review` status.
+4. A developer uses the local React console to manually edit, validate, and approve the mapping via the `/api/developer/templates` endpoints before it becomes active for end users.
+
+---
 ## Tech stack
 
 | Layer | Technology |
