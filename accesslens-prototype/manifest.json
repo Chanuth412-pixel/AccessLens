@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "AccessLens Minimal Prototype",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}

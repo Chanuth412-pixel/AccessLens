@@ -12,9 +12,12 @@
 
 In Sri Lanka specially Government websites for services like passport renewal, business registration, and tax filing can be hard to use. Many people use YouTube videos, blogs, or online forums to understand what to do. This creates several problems:
 
-- **Old Information:** Tutorials can become incorrect when the website design, field names, or requirements change.
-- **No Personal Help:** Videos and blogs cannot understand the exact error or special problem a user is facing.
-- **Confusion and Mistakes:** Switching between the government website and a tutorial can confuse users, cause mistakes, and lead to session timeouts.
+
+## This creates several problems:
+
+Tutorials can become outdated when the website layout, field names, or requirements change.
+Videos and blogs cannot understand the exact problem a user is facing.
+Switching between the government website and a tutorial can cause confusion, mistakes, and session timeouts.
 
 ## What AccessLens Does
 
