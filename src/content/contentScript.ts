@@ -234,6 +234,87 @@ function clearLocalDraft(draftKey: string) {
   });
 }
 
+function getOriginalPageDraftKey() {
+  const url = new URL(window.location.href);
+  return `accesslens-original-draft:${url.hostname}${url.pathname}`;
+}
+
+function getControlSelector(control: FormControl) {
+  if (control.id) {
+    return `#${escapeAttributeValue(control.id)}`;
+  }
+  if (control.name) {
+    return `[name="${escapeAttributeValue(control.name)}"]`;
+  }
+  return null;
+}
+
+function initOriginalPageDraftHandler() {
+  const draftKey = getOriginalPageDraftKey();
+
+  void getLocalDraft(draftKey).then((saved) => {
+    if (!saved) return;
+    Object.entries(saved).forEach(([selector, value]) => {
+      if (!value) return;
+      try {
+        const control = document.querySelector<FormControl>(selector);
+        if (control && isSafeFillTarget(control) && !control.closest(`#${overlayId}`)) {
+          if (control.value !== value) {
+            setNativeValue(control, value);
+            control.dispatchEvent(new Event("input", { bubbles: true }));
+            control.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+      } catch {
+        // Ignore invalid selectors
+      }
+    });
+  });
+
+  let debounceTimer: number | undefined;
+
+  const handleOriginalInput = (event: Event) => {
+    const target = event.target;
+    if (!isSafeFillTarget(target as Element)) {
+      return;
+    }
+
+    const control = target as FormControl;
+    if (control.closest(`#${overlayId}`)) {
+      return;
+    }
+
+    const selector = getControlSelector(control);
+    if (!selector) {
+      return;
+    }
+
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(async () => {
+      const currentDraft = (await getLocalDraft(draftKey)) || {};
+      const val = control.value.trim();
+      if (val) {
+        currentDraft[selector] = val;
+      } else {
+        delete currentDraft[selector];
+      }
+      void saveLocalDraft(draftKey, currentDraft);
+    }, 300);
+  };
+
+  document.addEventListener("input", handleOriginalInput, true);
+  document.addEventListener("change", handleOriginalInput, true);
+
+  document.addEventListener("submit", (event) => {
+    const isOverlaySubmit = event.composedPath().some(
+      (el) => el instanceof HTMLElement && el.id === overlayId
+    );
+    if (!isOverlaySubmit) {
+      void clearLocalDraft(draftKey);
+    }
+  }, true);
+}
+
 function getWorkflowProgress() {
   return new Promise<WorkflowProgress | null>((resolve) => {
     const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
@@ -1754,4 +1835,5 @@ async function injectOverlay() {
 }
 
 void injectOverlay();
+initOriginalPageDraftHandler();
 
