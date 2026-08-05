@@ -195,6 +195,7 @@ After frontend or extension changes, run `npm run build`, reload the extension f
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | Check API and database health |
+| `GET` | `/api/guides?url=...` | List the latest completed step-by-step recording for each category on a website |
 | `GET` | `/api/templates` | List approved templates |
 | `GET` | `/api/templates/match?url=...` | Legacy URL-only approved-template match |
 | `GET` | `/api/templates/resolve?url=...&heading=...` | Resolve exactly one approved template by URL and normalized H1 |

@@ -51,6 +51,7 @@ Suggested stack:
 API endpoints:
 
 - `GET /api/health`
+- `GET /api/guides?url=https://example.gov/service` (latest completed recording per website category)
 - `GET /api/templates`
 - `GET /api/templates/match?url=https://www.selenium.dev/selenium/web/web-form.html`
 - `POST /api/developer/website-requests/:id/generate-template`

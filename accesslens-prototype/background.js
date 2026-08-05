@@ -3,7 +3,7 @@ const apiBaseUrl = 'http://localhost:4000';
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== 'AL_RECORDING_API' || typeof message.path !== 'string') return;
 
-  if (!message.path.startsWith('/api/developer/recordings')) {
+  if (!message.path.startsWith('/api/developer/recordings') && !message.path.startsWith('/api/guides')) {
     sendResponse({ ok: false, error: 'Unsupported recording API path.' });
     return;
   }

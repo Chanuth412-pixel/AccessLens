@@ -412,6 +412,28 @@ const panelHtml = `
       box-shadow: 0 0 18px rgba(34, 211, 238, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
 
+    #al-category-picker {
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    #al-category-picker label {
+      color: #bae6fd;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    #al-category-select {
+      width: 100%;
+      border: 1px solid rgba(103, 232, 249, 0.48);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.92);
+      color: #ffffff;
+      font: 13px Inter, system-ui, sans-serif;
+    }
+
     @media (max-width: 460px) {
       #al-panel {
         right: 12px;
@@ -448,6 +470,13 @@ const panelHtml = `
       <button id="al-btn-stop" disabled>Finish</button>
       <button id="al-btn-play">Play</button>
       <button id="al-btn-clear">Clear</button>
+    </div>
+
+    <div id="al-category-picker">
+      <label for="al-category-select">What would you like help with?</label>
+      <select id="al-category-select">
+        <option value="">Select a category</option>
+      </select>
     </div>
 
     <div id="al-status" role="status">Loading...</div>
@@ -494,6 +523,10 @@ let recordingSetup = null;
 let isSaving = false;
 let isSuggestingInstruction = false;
 let suggestionRequestId = 0;
+let isUserGuideMode = false;
+let userGuides = [];
+let selectedGuideId = '';
+let removeGuideActionListener = null;
 
 const btnRecord = document.getElementById('al-btn-record');
 const btnClose = document.getElementById('al-btn-close');
@@ -518,6 +551,10 @@ const btnPrev = document.getElementById('al-btn-prev');
 const btnNext = document.getElementById('al-btn-next');
 const btnExit = document.getElementById('al-btn-exit');
 const btnDeleteStep = document.getElementById('al-btn-delete-step');
+const actionRow = document.querySelector('.al-action-row');
+const categoryPicker = document.getElementById('al-category-picker');
+const categorySelect = document.getElementById('al-category-select');
+const panelTitle = document.querySelector('.al-panel-title');
 
 function storageGet(keys) {
   return new Promise((resolve) => chrome.storage.local.get(keys, resolve));
@@ -638,17 +675,37 @@ function toLocalStep(step) {
   };
 }
 
+function toLocalGuideStep(step) {
+  return {
+    stepOrder: step.stepOrder,
+    pageUrl: step.pageUrl,
+    pageTitle: step.pageTitle,
+    action: step.actionType,
+    selector: step.selector,
+    xpath: step.xpath,
+    label: step.elementLabel,
+    instruction: step.instructionText,
+    metadata: {},
+    saved: true
+  };
+}
+
 async function persistLocalState() {
   await storageSet({
     accesslens_recording_setup: recordingSetup,
     al_isRecording: isRecording,
     al_isPlaying: isPlaying,
     al_playbackIndex: currentStepIndex,
-    al_steps: steps
+    al_steps: steps,
+    al_selectedGuideId: selectedGuideId
   });
 }
 
 function clearHighlight() {
+  if (removeGuideActionListener) {
+    removeGuideActionListener();
+    removeGuideActionListener = null;
+  }
   if (highlightedElement) {
     highlightedElement.style.outline = highlightedElement.dataset.alPreviousOutline || '';
     delete highlightedElement.dataset.alPreviousOutline;
@@ -660,12 +717,54 @@ function highlightCurrentStep() {
   clearHighlight();
   const step = steps[currentStepIndex];
   if (!step) return false;
-  const target = document.querySelector(step.selector);
+  let target = null;
+  try {
+    target = document.querySelector(step.selector);
+  } catch {
+    // Fall back to XPath below.
+  }
+  if (!(target instanceof HTMLElement) && step.xpath) {
+    try {
+      target = document.evaluate(
+        step.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+      ).singleNodeValue;
+    } catch {
+      target = null;
+    }
+  }
   if (target instanceof HTMLElement) {
     target.dataset.alPreviousOutline = target.style.outline;
     target.style.outline = '4px solid #ef4444';
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     highlightedElement = target;
+    if (isUserGuideMode) {
+      const eventName = step.action === 'click' ? 'click' : 'change';
+      const handleExpectedAction = () => {
+        if (removeGuideActionListener) removeGuideActionListener();
+        removeGuideActionListener = null;
+        if (currentStepIndex >= steps.length - 1) {
+          isPlaying = false;
+          selectedGuideId = '';
+          void persistLocalState();
+          window.setTimeout(() => {
+            clearHighlight();
+            steps = [];
+            currentStepIndex = 0;
+            categorySelect.value = '';
+            statusText.textContent = 'Guide complete. Select another category whenever you need help.';
+            renderStepEditor(false);
+          }, 180);
+          return;
+        }
+        currentStepIndex++;
+        void persistLocalState();
+        window.setTimeout(() => renderStepEditor(true), 180);
+      };
+      target.addEventListener(eventName, handleExpectedAction, { capture: true, once: true });
+      removeGuideActionListener = () => target.removeEventListener(
+        eventName, handleExpectedAction, { capture: true }
+      );
+    }
     return true;
   }
   return false;
@@ -674,7 +773,7 @@ function highlightCurrentStep() {
 function renderStepEditor(shouldHighlight = isPlaying) {
   const step = steps[currentStepIndex];
   const isCompleted = recordingSetup?.status === 'completed';
-  if (!step || (isCompleted && !isPlaying)) {
+  if (!step || (isCompleted && !isPlaying) || (isUserGuideMode && !isPlaying)) {
     stepEditor.style.display = 'none';
     clearHighlight();
     return;
@@ -695,7 +794,9 @@ function renderStepEditor(shouldHighlight = isPlaying) {
   playbackNav.style.display = isPlaying ? 'flex' : 'none';
   btnDeleteStep.style.display = isPlaying ? 'none' : 'block';
   btnPrev.disabled = currentStepIndex === 0;
-  btnNext.disabled = currentStepIndex === steps.length - 1;
+  btnNext.disabled = !isUserGuideMode && currentStepIndex === steps.length - 1;
+  btnNext.textContent = isUserGuideMode && currentStepIndex === steps.length - 1 ? 'Complete' : 'Next';
+  btnExit.textContent = isUserGuideMode ? 'Exit Guide' : 'Exit Playback';
   btnExit.style.display = isPlaying ? 'block' : 'none';
   if (shouldHighlight) {
     const highlighted = highlightCurrentStep();
@@ -781,10 +882,52 @@ function updateControls() {
     : 'Start from the AccessLens Developer Console';
 }
 
+async function initializeUserGuides(stored) {
+  isUserGuideMode = true;
+  actionRow.style.display = 'none';
+  categoryPicker.style.display = 'flex';
+  panelTitle.textContent = 'AccessLens Website Guide';
+  contextText.textContent = new URL(window.location.href).hostname;
+  statusText.textContent = 'Loading saved categories for this website...';
+
+  try {
+    const data = await recordingApi(`/api/guides?url=${encodeURIComponent(cleanPageUrl())}`);
+    userGuides = Array.isArray(data?.guides) ? data.guides : [];
+    userGuides.forEach((guide) => {
+      const option = document.createElement('option');
+      option.value = guide.id;
+      option.textContent = `${guide.category} (${guide.steps.length} step${guide.steps.length === 1 ? '' : 's'})`;
+      categorySelect.appendChild(option);
+    });
+
+    selectedGuideId = typeof stored.al_selectedGuideId === 'string' ? stored.al_selectedGuideId : '';
+    const selectedGuide = userGuides.find((guide) => guide.id === selectedGuideId);
+    if (selectedGuide) {
+      categorySelect.value = selectedGuide.id;
+      steps = selectedGuide.steps.map(toLocalGuideStep);
+      currentStepIndex = Math.min(Number(stored.al_playbackIndex) || 0, Math.max(0, steps.length - 1));
+      isPlaying = true;
+      statusText.textContent = `Showing ${selectedGuide.category}. Follow each highlighted step.`;
+      renderStepEditor(true);
+      return;
+    }
+
+    steps = [];
+    isPlaying = false;
+    renderStepEditor(false);
+    statusText.textContent = userGuides.length
+      ? 'Select a category to see its instructions step by step.'
+      : 'No saved instruction categories are available for this website yet.';
+  } catch (error) {
+    statusText.textContent = `Could not load website categories: ${error.message}`;
+  }
+}
+
 async function initialize() {
   const token = getRecordingToken();
   const stored = await storageGet([
-    'accesslens_recording_setup', 'al_isRecording', 'al_isPlaying', 'al_playbackIndex', 'al_steps'
+    'accesslens_recording_setup', 'al_isRecording', 'al_isPlaying', 'al_playbackIndex', 'al_steps',
+    'al_selectedGuideId'
   ]);
 
   recordingSetup = stored.accesslens_recording_setup || null;
@@ -796,6 +939,10 @@ async function initialize() {
   const storedIsPlaying = isPlaying;
 
   const sessionId = token || recordingSetup?.sessionId;
+  if (!sessionId) {
+    await initializeUserGuides(stored);
+    return;
+  }
   if (sessionId) {
     try {
       const storedSessionId = recordingSetup?.sessionId;
@@ -1024,6 +1171,18 @@ btnPrev.addEventListener('click', async () => {
 });
 
 btnNext.addEventListener('click', async () => {
+  if (isUserGuideMode && currentStepIndex >= steps.length - 1) {
+    isPlaying = false;
+    selectedGuideId = '';
+    steps = [];
+    currentStepIndex = 0;
+    categorySelect.value = '';
+    clearHighlight();
+    await persistLocalState();
+    statusText.textContent = 'Guide complete. Select another category whenever you need help.';
+    renderStepEditor(false);
+    return;
+  }
   if (currentStepIndex < steps.length - 1) currentStepIndex++;
   await persistLocalState();
   const stepPageUrl = steps[currentStepIndex]?.pageUrl;
@@ -1036,11 +1195,41 @@ btnNext.addEventListener('click', async () => {
 
 btnExit.addEventListener('click', () => {
   isPlaying = false;
+  if (isUserGuideMode) {
+    selectedGuideId = '';
+    steps = [];
+    currentStepIndex = 0;
+    categorySelect.value = '';
+  }
   clearHighlight();
   void persistLocalState();
-  statusText.textContent = `${steps.length} recorded steps.`;
+  statusText.textContent = isUserGuideMode
+    ? 'Guide closed. Select a category to begin again.'
+    : `${steps.length} recorded steps.`;
   updateControls();
   renderStepEditor(false);
+});
+
+categorySelect.addEventListener('change', async () => {
+  const guide = userGuides.find((candidate) => candidate.id === categorySelect.value);
+  selectedGuideId = guide?.id || '';
+  steps = guide ? guide.steps.map(toLocalGuideStep) : [];
+  currentStepIndex = 0;
+  isPlaying = Boolean(guide);
+  await persistLocalState();
+  if (!guide) {
+    clearHighlight();
+    statusText.textContent = 'Select a category to see its instructions step by step.';
+    renderStepEditor(false);
+    return;
+  }
+  contextText.textContent = `${guide.category} - ${new URL(window.location.href).hostname}`;
+  statusText.textContent = `Showing ${guide.category}. Follow each highlighted step.`;
+  if (cleanPageUrl() !== steps[0]?.pageUrl) {
+    window.location.assign(steps[0].pageUrl);
+  } else {
+    renderStepEditor(true);
+  }
 });
 
 btnDeleteStep.addEventListener('click', async () => {

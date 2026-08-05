@@ -37,6 +37,67 @@ function normalizeDomain(rawUrl: string) {
   return new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
 }
 
+/**
+ * Return the latest completed recording for each category on a website.
+ * Draft and cancelled recordings never leave the developer API.
+ */
+export async function listCompletedGuidesForUrl(rawUrl: string) {
+  const domain = normalizeDomain(rawUrl);
+  const sessionsResult = await query<RecordingSessionRow>(
+    `
+      select distinct on (lower(trim(category))) *
+      from recording_sessions
+      where base_domain = $1
+        and status = 'completed'
+      order by lower(trim(category)), completed_at desc nulls last, updated_at desc
+    `,
+    [domain]
+  );
+
+  if (sessionsResult.rows.length === 0) {
+    return [];
+  }
+
+  const sessionIds = sessionsResult.rows.map((session) => session.id);
+  const stepsResult = await query<RecordingStepRow>(
+    `
+      select *
+      from recording_steps
+      where recording_session_id = any($1::uuid[])
+      order by recording_session_id, step_order
+    `,
+    [sessionIds]
+  );
+  const stepsBySession = new Map<string, RecordingStepRow[]>();
+  for (const step of stepsResult.rows) {
+    const steps = stepsBySession.get(step.recording_session_id) ?? [];
+    steps.push(step);
+    stepsBySession.set(step.recording_session_id, steps);
+  }
+
+  return sessionsResult.rows
+    .map((session) => ({
+      id: session.id,
+      category: session.category,
+      siteName: session.site_name,
+      startUrl: session.site_url,
+      steps: (stepsBySession.get(session.id) ?? []).map((step) => ({
+        id: step.id,
+        stepOrder: step.step_order,
+        pageUrl: step.page_url,
+        pageTitle: step.page_title,
+        actionType: step.action_type,
+        selector: step.selector,
+        xpath: step.xpath,
+        elementLabel: step.element_label,
+        instructionTitle: step.instruction_title,
+        instructionText: step.instruction_text
+      }))
+    }))
+    .filter((guide) => guide.steps.length > 0)
+    .sort((left, right) => left.category.localeCompare(right.category));
+}
+
 export async function createRecordingSession(websiteRequestId: string, category: string) {
   const websiteRequest = await getWebsiteRequest(websiteRequestId);
   if (!websiteRequest) {

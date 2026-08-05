@@ -1001,6 +1001,158 @@
   border-color: #16a34a;
 }
 
+.accesslens-recorded-guide {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 2147483647;
+  width: min(390px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border: 2px solid #2563eb;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 24px 60px -10px rgba(15, 23, 42, 0.34);
+}
+
+.accesslens-recorded-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #dbeafe;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #eff6ff, #ffffff 65%);
+}
+
+.accesslens-recorded-guide-body {
+  padding: 16px;
+}
+
+.accesslens-category-label {
+  display: grid;
+  gap: 7px;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.accesslens-category-select {
+  width: 100%;
+  border: 1px solid #94a3b8;
+  border-radius: 9px;
+  padding: 10px 36px 10px 11px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 14px;
+}
+
+.accesslens-category-select:focus {
+  border-color: #2563eb;
+  outline: 3px solid #bfdbfe;
+  outline-offset: 1px;
+}
+
+.accesslens-recorded-guide-intro,
+.accesslens-recorded-instruction,
+.accesslens-target-status {
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.accesslens-recorded-step-area {
+  margin-top: 16px;
+}
+
+.accesslens-recorded-step-area[hidden] {
+  display: none;
+}
+
+.accesslens-recorded-step-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accesslens-recorded-step-meta[hidden] {
+  display: none;
+}
+
+.accesslens-action-badge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.accesslens-recorded-step-area h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.accesslens-recorded-instruction {
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.accesslens-target-status {
+  border-left: 3px solid #94a3b8;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  font-size: 12.5px;
+}
+
+.accesslens-target-status-success {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.accesslens-target-status-notice {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.accesslens-open-step-page {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.accesslens-open-step-page[hidden] {
+  display: none;
+}
+
+.accesslens-recorded-step-area .accesslens-guide-progress {
+  margin-top: 14px;
+}
+
+.accesslens-recorded-navigation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.accesslens-recorded-navigation button {
+  width: 100%;
+}
+
 @media (max-width: 900px) {
   .accesslens-guide {
     top: 16px;
@@ -1011,6 +1163,12 @@
     top: 176px;
     right: 16px;
     max-height: calc(100vh - 192px);
+  }
+
+  .accesslens-recorded-guide {
+    top: 16px;
+    right: 16px;
+    max-height: calc(100vh - 32px);
   }
 }
 
