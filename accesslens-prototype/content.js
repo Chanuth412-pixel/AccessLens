@@ -1,9 +1,9 @@
 // content.js
 
-// 1. Inject the Floating UI
+// 1. Inject Floating Control Panel
 const panelHtml = `
   <div id="al-panel" style="position: fixed; bottom: 20px; right: 20px; width: 320px; background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 16px; z-index: 2147483647; display: flex; flex-direction: column; gap: 12px;">
-    <div style="font-weight: 600; font-size: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px;">AccessLens PoC (Debug Mode)</div>
+    <div style="font-weight: 600; font-size: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px;">AccessLens Component Highlighter</div>
     <div style="display: flex; gap: 6px;">
       <button id="al-btn-record" style="flex: 1; padding: 8px 4px; background: #ef4444; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500; font-size: 12px;">Record</button>
       <button id="al-btn-stop" style="flex: 1; padding: 8px 4px; background: #64748b; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: 500; font-size: 12px;" disabled>Stop</button>
@@ -28,7 +28,7 @@ const wrapper = document.createElement('div');
 wrapper.innerHTML = panelHtml;
 document.body.appendChild(wrapper);
 
-// State Variables
+// State Management
 let isRecording = false;
 let isPlaying = false;
 let steps = [];
@@ -48,16 +48,14 @@ const btnNext = document.getElementById('al-btn-next');
 const btnExit = document.getElementById('al-btn-exit');
 const btnDeleteStep = document.getElementById('al-btn-delete-step');
 
-// Helper: Smart CSS Selector Generator (Foolproof string version)
+// Selector Generator
 function getCssPath(el) {
   if (!(el instanceof Element)) return;
 
-  // 1. Safe ID check (Fixes the 'a#6' crash)
   if (el.id) {
     return el.tagName.toLowerCase() + '[id="' + el.id + '"]';
   }
 
-  // 2. Use the 'name' attribute for forms
   if (el.name && ['input', 'select', 'textarea'].includes(el.tagName.toLowerCase())) {
     let nameSelector = el.tagName.toLowerCase() + '[name="' + el.name + '"]';
     if (el.type === 'radio' || el.type === 'checkbox') {
@@ -66,7 +64,6 @@ function getCssPath(el) {
     return nameSelector;
   }
 
-  // 3. Fallback: Build path
   const path = [];
   let current = el;
   while (current && current.nodeType === Node.ELEMENT_NODE) {
@@ -90,7 +87,7 @@ function getCssPath(el) {
   return path.join(" > ");
 }
 
-// Helper: Label Extractor
+// Label Extractor
 function extractLabel(el) {
   if (el.id) {
     const label = document.querySelector(`label[for="${el.id}"]`);
@@ -99,10 +96,8 @@ function extractLabel(el) {
   return el.placeholder || el.innerText?.substring(0, 30) || el.name || el.tagName.toLowerCase();
 }
 
-// 2. Initialize
+// Initialization
 chrome.storage.local.get(['al_isRecording', 'al_isPlaying', 'al_playbackIndex', 'al_steps'], (result) => {
-  console.log('[AccessLens] Storage Loaded:', result);
-  
   isRecording = result.al_isRecording || false;
   isPlaying = result.al_isPlaying || false;
   currentPlaybackIndex = result.al_playbackIndex || 0;
@@ -124,64 +119,40 @@ chrome.storage.local.get(['al_isRecording', 'al_isPlaying', 'al_playbackIndex', 
   }
 });
 
-// 3. Recording Event Handler (Updated with logs and broader capture)
+// Event Interceptor
 const handleRecordEvent = (e) => {
   if (!isRecording) return;
   
-  if (e.target.closest('#al-panel')) {
-    console.log('[AccessLens] Ignored: Clicked inside the AccessLens control panel.');
-    return;
-  }
+  if (e.target.closest('#al-panel')) return;
 
   const target = e.target;
   const tagName = target.tagName.toLowerCase();
-  
-  console.log(`[AccessLens] Event intercepted: Type=${e.type}, Tag=${tagName}`);
-
-  // Broadened valid tags to include generic containers if they trigger a click
   const validTags = ['input', 'select', 'textarea', 'button', 'a', 'label', 'div', 'span', 'td', 'li'];
   
   if (validTags.includes(tagName) || target.getAttribute('role') === 'button') {
     const selector = getCssPath(target);
     const label = extractLabel(target);
     
-    // Check for duplicates
-    if (steps.length > 0 && steps[steps.length - 1].selector === selector) {
-      console.log(`[AccessLens] Ignored duplicate event for selector: ${selector}`);
-      return;
-    }
+    if (steps.length > 0 && steps[steps.length - 1].selector === selector) return;
 
     const newStep = { 
       selector, 
       label, 
-      action: e.type, 
-      url: window.location.href 
+      action: e.type
     };
     
     steps.push(newStep);
-    console.log(`[AccessLens] Step Captured!`, newStep);
     
     chrome.storage.local.set({ al_steps: steps }, () => {
       statusText.innerText = `Status: Recording (${steps.length} steps)`;
     });
-  } else {
-    console.warn(`[AccessLens] Ignored event on unsupported tag: ${tagName}`);
   }
 };
 
-// 4. Playback Logic (Updated with logs)
+// Playback Handler (Strict Visual Highlighting Only)
 function handlePlaybackState() {
   const currentStep = steps[currentPlaybackIndex];
   if (!currentStep) return;
-
-  console.log(`[AccessLens] Playing Step ${currentPlaybackIndex + 1}:`, currentStep);
-
-  if (window.location.href !== currentStep.url) {
-    console.log(`[AccessLens] Redirecting... Current URL: ${window.location.href}, Expected URL: ${currentStep.url}`);
-    statusText.innerText = `Status: Navigating to step page...`;
-    window.location.href = currentStep.url;
-    return;
-  }
 
   playbackUi.style.display = 'flex';
   statusText.innerText = 'Status: Playing Guide';
@@ -190,25 +161,26 @@ function handlePlaybackState() {
   btnPrev.disabled = currentPlaybackIndex === 0;
   btnNext.disabled = currentPlaybackIndex === steps.length - 1;
 
-  if (highlightedElement) highlightedElement.style.outline = '';
+  // Clear active outline
+  if (highlightedElement) {
+    highlightedElement.style.outline = '';
+    highlightedElement = null;
+  }
   
   setTimeout(() => {
     const target = document.querySelector(currentStep.selector);
     if (target) {
-      console.log(`[AccessLens] Element found for playback:`, target);
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       target.style.outline = '4px solid #ef4444';
       highlightedElement = target;
     } else {
-      console.error(`[AccessLens] Failed to find element with selector: ${currentStep.selector}`);
       stepLabel.innerText += " (Element not found on this page)";
     }
-  }, 500);
+  }, 300);
 }
 
-// 5. Button Listeners (Logs added)
+// Controls
 btnRecord.addEventListener('click', () => {
-  console.log('[AccessLens] Started Recording');
   isRecording = true;
   isPlaying = false;
   steps = [];
@@ -225,7 +197,6 @@ btnRecord.addEventListener('click', () => {
 });
 
 btnStop.addEventListener('click', () => {
-  console.log('[AccessLens] Stopped Recording');
   isRecording = false;
   chrome.storage.local.set({ al_isRecording: false });
   
@@ -243,7 +214,6 @@ btnPlay.addEventListener('click', () => {
     alert("No steps recorded yet.");
     return;
   }
-  console.log('[AccessLens] Started Playback');
   isPlaying = true;
   currentPlaybackIndex = 0;
   
@@ -253,7 +223,6 @@ btnPlay.addEventListener('click', () => {
 });
 
 btnClear.addEventListener('click', () => {
-  console.log('[AccessLens] Cleared all steps');
   isRecording = false;
   isPlaying = false;
   steps = [];
@@ -300,21 +269,19 @@ btnPrev.addEventListener('click', () => {
 });
 
 btnExit.addEventListener('click', () => {
-  console.log('[AccessLens] Exited Playback');
   isPlaying = false;
   chrome.storage.local.set({ al_isPlaying: false, al_playbackIndex: 0 });
-  if (highlightedElement) highlightedElement.style.outline = '';
+  if (highlightedElement) {
+    highlightedElement.style.outline = '';
+    highlightedElement = null;
+  }
   playbackUi.style.display = 'none';
   statusText.innerText = `Status: Saved ${steps.length} steps`;
 });
 
 btnDeleteStep.addEventListener('click', () => {
-  console.log(`[AccessLens] Deleting step ${currentPlaybackIndex + 1}`);
-  
-  // Remove the current step from the array
   steps.splice(currentPlaybackIndex, 1);
   
-  // If we just deleted the last step, we need to exit playback entirely
   if (steps.length === 0) {
     btnExit.click(); 
     statusText.innerText = `Status: Cleared (0 steps)`;
@@ -322,12 +289,10 @@ btnDeleteStep.addEventListener('click', () => {
     return;
   }
   
-  // If we deleted the very last item in a multi-step sequence, move the index back by one
   if (currentPlaybackIndex >= steps.length) {
     currentPlaybackIndex = steps.length - 1;
   }
 
-  // Save the updated array and re-render the UI
   chrome.storage.local.set({ 
     al_steps: steps, 
     al_playbackIndex: currentPlaybackIndex 
