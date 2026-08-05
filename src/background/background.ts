@@ -19,6 +19,8 @@ type RuntimeMessage = {
   sessionId?: string;
   values?: Record<string, string>;
   progress?: WorkflowProgress;
+  draftKey?: string;
+  draftValues?: Record<string, string>;
 };
 
 declare const chrome: {
@@ -42,6 +44,14 @@ declare const chrome: {
         callback: (items: Record<string, WorkflowProgress | undefined>) => void
       ) => void;
       set: (items: Record<string, WorkflowProgress>, callback: () => void) => void;
+      remove: (key: string, callback: () => void) => void;
+    };
+    local: {
+      get: (
+        key: string,
+        callback: (items: Record<string, Record<string, string> | undefined>) => void
+      ) => void;
+      set: (items: Record<string, Record<string, string>>, callback: () => void) => void;
       remove: (key: string, callback: () => void) => void;
     };
   };
@@ -75,6 +85,43 @@ function getSessionKey(sessionId: string) {
 const windowSessions = new Map<string, AccessLensWindowSession>();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "GET_LOCAL_DRAFT" && message.draftKey) {
+    const key = message.draftKey;
+    chrome.storage.local.get(key, (items) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not read local draft." });
+        return;
+      }
+      sendResponse({ ok: true, values: items?.[key] ?? null });
+    });
+    return true;
+  }
+
+  if (message.type === "SAVE_LOCAL_DRAFT" && message.draftKey && message.draftValues) {
+    const key = message.draftKey;
+    const values = message.draftValues;
+    chrome.storage.local.set({ [key]: values }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not save local draft." });
+        return;
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (message.type === "CLEAR_LOCAL_DRAFT" && message.draftKey) {
+    const key = message.draftKey;
+    chrome.storage.local.remove(key, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not clear local draft." });
+        return;
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (message.type === "GET_WORKFLOW_PROGRESS") {
     chrome.storage.session.get(workflowProgressStorageKey, (items) => {
       if (chrome.runtime.lastError) {

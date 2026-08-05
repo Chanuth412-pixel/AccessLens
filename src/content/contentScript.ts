@@ -163,6 +163,8 @@ declare const chrome: {
         body?: unknown;
         session?: unknown;
         progress?: WorkflowProgress;
+        draftKey?: string;
+        draftValues?: Record<string, string>;
       },
       callback: (response: {
         ok?: boolean;
@@ -170,10 +172,67 @@ declare const chrome: {
         data?: unknown;
         error?: string;
         progress?: WorkflowProgress | null;
+        values?: Record<string, string> | null;
       } | undefined) => void
     ) => void;
   };
 };
+
+function getDraftStorageKey(templateKey: string) {
+  return `accesslens-draft:${templateKey}`;
+}
+
+function getLocalDraft(draftKey: string) {
+  return new Promise<Record<string, string> | null>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve(null);
+      return;
+    }
+
+    runtime.sendMessage({ type: "GET_LOCAL_DRAFT", draftKey }, (response) => {
+      if (runtime.lastError || !response?.ok) {
+        resolve(null);
+        return;
+      }
+
+      resolve(response.values ?? null);
+    });
+  });
+}
+
+function saveLocalDraft(draftKey: string, draftValues: Record<string, string>) {
+  return new Promise<void>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve();
+      return;
+    }
+
+    runtime.sendMessage({ type: "SAVE_LOCAL_DRAFT", draftKey, draftValues }, () => {
+      void runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+function clearLocalDraft(draftKey: string) {
+  return new Promise<void>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve();
+      return;
+    }
+
+    runtime.sendMessage({ type: "CLEAR_LOCAL_DRAFT", draftKey }, () => {
+      void runtime.lastError;
+      resolve();
+    });
+  });
+}
 
 function getWorkflowProgress() {
   return new Promise<WorkflowProgress | null>((resolve) => {
@@ -1195,12 +1254,19 @@ async function injectOverlay() {
     return;
   }
 
+  const draftKey = getDraftStorageKey(template.templateKey);
+  const savedDraft = await getLocalDraft(draftKey);
+
   let viewMode: ViewMode = "wizard";
   let language: Language = "en";
   let currentStepIndex = 0;
   let isDarkMode = false;
   let isCollapsed = false;
-  const formValuesState: Record<string, string> = {};
+  const formValuesState: Record<string, string> = savedDraft ? { ...savedDraft } : {};
+
+  const persistDraftState = () => {
+    void saveLocalDraft(draftKey, formValuesState);
+  };
 
   const panel = document.createElement("section");
   panel.className = "accesslens-panel";
@@ -1272,8 +1338,6 @@ async function injectOverlay() {
   const description = document.createElement("div");
   description.className = "accesslens-description";
   description.textContent = template.templateName;
-
-
 
   const modeSwitcher = document.createElement("div");
   modeSwitcher.className = "accesslens-mode-switcher";
@@ -1359,7 +1423,6 @@ async function injectOverlay() {
     allFieldsModeBtn.textContent = t(language, "allFieldsView");
     closeButton.textContent = t(language, "close");
     separateWindowButton.textContent = t(language, "separateWindow");
-
   };
 
   const movePanelTo = (left: number, top: number) => {
@@ -1408,6 +1471,7 @@ async function injectOverlay() {
         formValuesState[field.id] = value;
       }
     });
+    persistDraftState();
   };
 
   const syncStateToDom = () => {
@@ -1456,6 +1520,9 @@ async function injectOverlay() {
       message.classList.add(hasErrors ? "accesslens-message-error" : "accesslens-message-success");
       message.textContent = hasErrors ? t(language, "fillWarning") : t(language, "fillSuccess");
       setCurrentStepReady(!hasErrors);
+      if (!hasErrors) {
+        void clearLocalDraft(draftKey);
+      }
     });
 
     reviewContainer.replaceChildren(createReviewDetails(formValuesState, fields, language), confirmButton);
@@ -1487,6 +1554,7 @@ async function injectOverlay() {
         input.addEventListener("input", (e) => {
           formValuesState[field.id] = (e.target as FormControl).value.trim();
           setCurrentStepReady(false);
+          persistDraftState();
         });
         formContentContainer.append(wrapper);
       });
@@ -1560,6 +1628,7 @@ async function injectOverlay() {
       input.addEventListener("input", (e) => {
         formValuesState[currentField.id] = (e.target as FormControl).value.trim();
         setCurrentStepReady(false);
+        persistDraftState();
       });
 
       const hint = document.createElement("p");
