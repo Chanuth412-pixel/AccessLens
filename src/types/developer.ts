@@ -26,6 +26,41 @@ export type WebsiteRequest = {
   template_status: TemplateStatus | null;
 };
 
+export type RecordingStep = {
+  id: string;
+  recording_session_id: string;
+  step_order: number;
+  page_url: string;
+  page_title: string;
+  action_type: "click" | "input" | "select" | "change";
+  selector: string;
+  xpath: string | null;
+  element_label: string;
+  instruction_title: string;
+  instruction_text: string;
+  element_metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecordingSession = {
+  id: string;
+  website_request_id: string | null;
+  site_url: string;
+  base_domain: string;
+  site_name: string;
+  category: string;
+  status: "recording" | "completed" | "cancelled";
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecordingSessionDetail = RecordingSession & {
+  steps: RecordingStep[];
+};
+
 
 export type DeveloperSite = {
   id: string;

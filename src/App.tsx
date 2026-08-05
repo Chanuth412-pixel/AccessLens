@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   approveDeveloperTemplate,
+  createRecordingSession,
   fetchDeveloperStats,
   fetchDeveloperTemplate,
   fetchPendingDeveloperTemplates,
   fetchWebsiteRequests,
-  generateWebsiteRequestTemplate,
+  fetchRecordingSessions,
   rejectDeveloperTemplate,
   saveDeveloperTemplate,
   validateDeveloperTemplate
@@ -16,11 +17,12 @@ import type {
   DeveloperTemplateDetail,
   DeveloperTemplateSummary,
   DeveloperValidationResult,
+  RecordingSessionDetail,
   TemplateStatus,
   WebsiteRequest
 } from "./types/developer";
 
-type View = "dashboard" | "pending" | "requests" | "review" | "fieldMappings" | "runnerInstructions";
+type View = "dashboard" | "pending" | "requests" | "recordings" | "review" | "fieldMappings" | "runnerInstructions";
 
 export type FormValues = {
   fullName: string;
@@ -127,13 +129,11 @@ function PendingTemplatesTable({
 
 function WebsiteRequestsTable({
   requests,
-  generatingRequestId,
   onCreateTemplate,
   onReviewTemplate
 }: {
   requests: WebsiteRequest[];
-  generatingRequestId: string | null;
-  onCreateTemplate: (id: string) => void;
+  onCreateTemplate: (request: WebsiteRequest) => void;
   onReviewTemplate: (templateId: string) => void;
 }) {
   if (requests.length === 0) {
@@ -197,10 +197,9 @@ function WebsiteRequestsTable({
                   <button
                     type="button"
                     className="primary-button request-template-button"
-                    disabled={generatingRequestId !== null}
-                    onClick={() => onCreateTemplate(req.id)}
+                    onClick={() => onCreateTemplate(req)}
                   >
-                    {generatingRequestId === req.id ? "Generating..." : "Create Template"}
+                    Create Template
                   </button>
                 )}
               </td>
@@ -209,6 +208,215 @@ function WebsiteRequestsTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function CategoryDialog({
+  request,
+  category,
+  error,
+  busy,
+  onCategoryChange,
+  onCancel,
+  onContinue
+}: {
+  request: WebsiteRequest;
+  category: string;
+  error: string;
+  busy: boolean;
+  onCategoryChange: (category: string) => void;
+  onCancel: () => void;
+  onContinue: () => void;
+}) {
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          onCancel();
+        }
+      }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
+      <section
+        className="category-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="category-dialog-title"
+        aria-describedby="category-dialog-description"
+      >
+        <div className="category-dialog-header">
+          <div>
+            <p className="eyebrow">New recording</p>
+            <h2 id="category-dialog-title">Choose a workflow category</h2>
+          </div>
+          <button className="modal-close-button" type="button" aria-label="Close" onClick={onCancel} disabled={busy}>
+            ×
+          </button>
+        </div>
+
+        <p id="category-dialog-description" className="category-dialog-description">
+          Name the process you want to record on <strong>{request.site_name}</strong>. For example,
+          use “Registration” for a registration flow.
+        </p>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onContinue();
+          }}
+        >
+          <label className="category-field" htmlFor="workflow-category">
+            <span>Category</span>
+            <input
+              id="workflow-category"
+              type="text"
+              value={category}
+              onChange={(event) => onCategoryChange(event.target.value)}
+              placeholder="e.g. Registration"
+              autoComplete="off"
+              autoFocus
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "category-error" : "category-help"}
+            />
+          </label>
+          {error ? (
+            <p id="category-error" className="field-error" role="alert">{error}</p>
+          ) : (
+            <p id="category-help" className="field-help">
+              After continuing, the website opens in a new tab so you can record this flow.
+            </p>
+          )}
+
+          <div className="category-dialog-actions">
+            <button className="secondary-button" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
+            <button className="primary-button" type="submit" disabled={busy}>
+              {busy ? "Preparing recording..." : "Continue to website"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function RecordingWorkspace({
+  request,
+  recordings,
+  loading,
+  onBack,
+  onRefresh,
+  onAddCategory
+}: {
+  request: WebsiteRequest;
+  recordings: RecordingSessionDetail[];
+  loading: boolean;
+  onBack: () => void;
+  onRefresh: () => void;
+  onAddCategory: () => void;
+}) {
+  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const selectedRecording = recordings.find((recording) => recording.id === selectedRecordingId) ?? null;
+
+  useEffect(() => {
+    if (selectedRecordingId && !recordings.some((recording) => recording.id === selectedRecordingId)) {
+      setSelectedRecordingId(null);
+    }
+  }, [recordings, selectedRecordingId]);
+
+  return (
+    <>
+      <section className="page-heading recording-page-heading">
+        <div>
+          <p className="eyebrow">Template categories</p>
+          <h1>{request.site_name}</h1>
+          <p>{request.base_domain} - Review saved categories and their recorded instructions.</p>
+        </div>
+        <div className="heading-actions">
+          <button className="secondary-button" type="button" onClick={onBack}>Back to Requests</button>
+          <button className="secondary-button" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          <button className="primary-button" type="button" onClick={onAddCategory}>Add Category</button>
+        </div>
+      </section>
+
+      {recordings.length === 0 && !loading ? (
+        <EmptyState
+          title="No categories recorded yet"
+          message="Add a category, record its website flow, and save an instruction for each step."
+        />
+      ) : selectedRecording ? (
+        <section className="recording-detail" aria-label={`${selectedRecording.category} instructions`}>
+          <div className="recording-detail-toolbar">
+            <button className="secondary-button" type="button" onClick={() => setSelectedRecordingId(null)}>
+              Back to Categories
+            </button>
+          </div>
+
+          <article className="recording-category-card recording-detail-card">
+            <header className="recording-category-header">
+              <div>
+                <p className="eyebrow">Category</p>
+                <h2>{selectedRecording.category}</h2>
+                <p>{selectedRecording.steps.length} recorded {selectedRecording.steps.length === 1 ? "step" : "steps"} - Started {formatDate(selectedRecording.started_at)}</p>
+              </div>
+              <StatusBadge status={selectedRecording.status} />
+            </header>
+
+            {selectedRecording.steps.length === 0 ? (
+              <p className="recording-empty-steps">
+                {selectedRecording.status === "recording"
+                  ? "Recording is in progress. Refresh after finishing it in the extension."
+                  : "No instructions were saved for this category."}
+              </p>
+            ) : (
+              <ol className="recording-instruction-list">
+                {selectedRecording.steps.map((step) => (
+                  <li key={step.id}>
+                    <span className="recording-step-number">{step.step_order}</span>
+                    <div>
+                      <div className="recording-step-heading">
+                        <strong>{step.element_label}</strong>
+                        <span>{step.action_type}</span>
+                      </div>
+                      <p>{step.instruction_text}</p>
+                      <small>{step.page_title || step.page_url}</small>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </article>
+        </section>
+      ) : (
+        <section className="recording-category-list" aria-label="Recorded template categories">
+          {recordings.map((recording) => (
+            <button
+              className="recording-category-card recording-category-button"
+              key={recording.id}
+              type="button"
+              onClick={() => setSelectedRecordingId(recording.id)}
+            >
+              <span className="recording-category-main">
+                <span className="eyebrow">Category</span>
+                <strong>{recording.category}</strong>
+                <span>{recording.steps.length} recorded {recording.steps.length === 1 ? "step" : "steps"} - Started {formatDate(recording.started_at)}</span>
+              </span>
+              <span className="recording-category-meta">
+                <StatusBadge status={recording.status} />
+                <span className="recording-view-text">View instructions</span>
+              </span>
+            </button>
+          ))}
+        </section>
+      )}
+    </>
   );
 }
 
@@ -602,13 +810,19 @@ function App() {
   const [stats, setStats] = useState<DeveloperStats>(emptyStats);
   const [pendingTemplates, setPendingTemplates] = useState<DeveloperTemplateSummary[]>([]);
   const [websiteRequests, setWebsiteRequests] = useState<WebsiteRequest[]>([]);
+  const [selectedRecordingRequest, setSelectedRecordingRequest] = useState<WebsiteRequest | null>(null);
+  const [recordingSessions, setRecordingSessions] = useState<RecordingSessionDetail[]>([]);
+  const [recordingsLoading, setRecordingsLoading] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<DeveloperTemplateDetail | null>(null);
   const [fieldMappings, setFieldMappings] = useState<DeveloperFieldMapping[]>([]);
   const [templateName, setTemplateName] = useState("");
   const [urlPatternsText, setUrlPatternsText] = useState("");
   const [validation, setValidation] = useState<DeveloperValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generatingRequestId, setGeneratingRequestId] = useState<string | null>(null);
+  const [recordingRequest, setRecordingRequest] = useState<WebsiteRequest | null>(null);
+  const [recordingCategory, setRecordingCategory] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [creatingRecording, setCreatingRecording] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -629,25 +843,100 @@ function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleCreateTemplate(id: string) {
-    setGeneratingRequestId(id);
+  async function refreshRecordingSessions(websiteRequestId: string) {
+    setRecordingsLoading(true);
     setError("");
+    try {
+      setRecordingSessions(await fetchRecordingSessions(websiteRequestId));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to load recording categories.");
+    } finally {
+      setRecordingsLoading(false);
+    }
+  }
+
+  function handleCreateTemplate(request: WebsiteRequest) {
+    setSelectedRecordingRequest(request);
+    setRecordingSessions([]);
     setMessage("");
-    setValidation(null);
+    setView("recordings");
+    void refreshRecordingSessions(request.id);
+  }
+
+  function openCategoryDialog() {
+    if (!selectedRecordingRequest) {
+      return;
+    }
+    setRecordingRequest(selectedRecordingRequest);
+    setRecordingCategory("");
+    setCategoryError("");
+    setError("");
+  }
+
+  async function startRecordingSetup() {
+    if (!recordingRequest) {
+      return;
+    }
+
+    const category = recordingCategory.trim();
+    if (!category) {
+      setCategoryError("Enter a category before continuing.");
+      return;
+    }
+
+    const targetWindow = window.open("about:blank", "_blank");
+    if (!targetWindow) {
+      setCategoryError("Allow pop-ups for AccessLens, then try again.");
+      return;
+    }
+
+    targetWindow.opener = null;
+    targetWindow.document.title = "Preparing AccessLens recording...";
+    setCreatingRecording(true);
 
     try {
-      const { template } = await generateWebsiteRequestTemplate(id);
-      setSelectedTemplate(template);
-      setFieldMappings(template.field_mappings);
-      setTemplateName(template.template_name);
-      setUrlPatternsText(template.url_patterns.join("\n"));
-      await refreshDashboard();
-      setMessage("AI template created in pending review. Validate its mappings before approval.");
-      setView("review");
+      const session = await createRecordingSession(recordingRequest.id, category);
+      const recordingSetup = {
+        sessionId: session.id,
+        requestId: recordingRequest.id,
+        category: session.category,
+        siteName: session.site_name,
+        url: session.site_url,
+        startedAt: session.started_at,
+        status: session.status
+      };
+
+      try {
+        window.localStorage.setItem("accesslens_recording_setup", JSON.stringify(recordingSetup));
+      } catch (caughtError) {
+        console.warn("Could not save the recording setup to local storage.", caughtError);
+      }
+
+      const browserApi = globalThis as typeof globalThis & {
+        chrome?: { storage?: { local?: { set: (items: Record<string, unknown>) => void } } };
+      };
+      browserApi.chrome?.storage?.local?.set({
+        accesslens_recording_setup: recordingSetup,
+        al_isRecording: true,
+        al_isPlaying: false,
+        al_steps: [],
+        al_playbackIndex: 0
+      });
+
+      const targetUrl = new URL(session.site_url);
+      targetUrl.searchParams.set("_accesslens_recording", session.id);
+      targetWindow.location.replace(targetUrl.toString());
+      setMessage(`Recording the "${category}" flow. Add an instruction for every captured step.`);
+      setRecordingRequest(null);
+      setRecordingCategory("");
+      setCategoryError("");
+      void refreshDashboard();
+      void refreshRecordingSessions(session.website_request_id ?? recordingRequest.id);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Failed to generate the website template.");
+      targetWindow.close();
+      setCategoryError(caughtError instanceof Error ? caughtError.message : "Could not start recording.");
     } finally {
-      setGeneratingRequestId(null);
+      setCreatingRecording(false);
     }
   }
 
@@ -807,7 +1096,7 @@ function App() {
             Pending Templates ({stats.pendingTemplates ?? 0})
           </button>
 
-          <button className={view === "requests" ? "nav-active" : ""} type="button" onClick={() => setView("requests")}>
+          <button className={view === "requests" || view === "recordings" ? "nav-active" : ""} type="button" onClick={() => setView("requests")}>
             Website Requests ({stats.pendingWebsiteRequests ?? 0})
           </button>
         </nav>
@@ -851,10 +1140,10 @@ function App() {
                 <p>Sites requested by users from the AccessLens Chrome Extension overlay.</p>
               </div>
             </section>
+            {message && <section className="notice success-notice">{message}</section>}
             <section className="panel">
               <WebsiteRequestsTable
                 requests={websiteRequests}
-                generatingRequestId={generatingRequestId}
                 onCreateTemplate={handleCreateTemplate}
                 onReviewTemplate={openTemplate}
               />
@@ -894,6 +1183,38 @@ function App() {
           <RunnerInstructionsPage
             template={currentReviewTemplate}
             onBack={() => setView("review")}
+          />
+        )}
+
+        {view === "recordings" && selectedRecordingRequest && (
+          <RecordingWorkspace
+            request={selectedRecordingRequest}
+            recordings={recordingSessions}
+            loading={recordingsLoading}
+            onBack={() => setView("requests")}
+            onRefresh={() => void refreshRecordingSessions(selectedRecordingRequest.id)}
+            onAddCategory={openCategoryDialog}
+          />
+        )}
+
+        {recordingRequest && (
+          <CategoryDialog
+            request={recordingRequest}
+            category={recordingCategory}
+            error={categoryError}
+            busy={creatingRecording}
+            onCategoryChange={(category) => {
+              setRecordingCategory(category);
+              if (categoryError) {
+                setCategoryError("");
+              }
+            }}
+            onCancel={() => {
+              setRecordingRequest(null);
+              setRecordingCategory("");
+              setCategoryError("");
+            }}
+            onContinue={startRecordingSetup}
           />
         )}
       </section>

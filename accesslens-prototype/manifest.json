@@ -3,6 +3,10 @@
   "name": "AccessLens Minimal Prototype",
   "version": "1.0",
   "permissions": ["storage"],
+  "host_permissions": ["http://localhost:4000/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

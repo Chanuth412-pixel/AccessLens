@@ -4,6 +4,8 @@ import type {
   DeveloperTemplateDetail,
   DeveloperTemplateSummary,
   DeveloperValidationResult,
+  RecordingSession,
+  RecordingSessionDetail,
   WebsiteRequest
 } from "../types/developer";
 
@@ -93,6 +95,21 @@ export async function validateDeveloperTemplate(templateId: string) {
 export async function fetchWebsiteRequests() {
   const data = await requestJson<{ requests: WebsiteRequest[] }>("/developer/website-requests");
   return data.requests;
+}
+
+export async function createRecordingSession(websiteRequestId: string, category: string) {
+  const data = await requestJson<{ session: RecordingSession }>("/developer/recordings", {
+    method: "POST",
+    body: JSON.stringify({ websiteRequestId, category })
+  });
+  return data.session;
+}
+
+export async function fetchRecordingSessions(websiteRequestId: string) {
+  const data = await requestJson<{ recordings: RecordingSessionDetail[] }>(
+    `/developer/recordings?websiteRequestId=${encodeURIComponent(websiteRequestId)}`
+  );
+  return data.recordings;
 }
 
 export async function generateWebsiteRequestTemplate(id: string) {

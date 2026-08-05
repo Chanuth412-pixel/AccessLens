@@ -139,6 +139,42 @@ create table if not exists website_requests (
   updated_at timestamptz not null default now()
 );
 
+-- Developer recording drafts. These remain separate from templates until a
+-- developer completes and later reviews the recorded workflow.
+create table if not exists recording_sessions (
+  id uuid primary key default gen_random_uuid(),
+  website_request_id uuid references website_requests(id) on delete set null,
+  site_url text not null,
+  base_domain text not null,
+  site_name text not null,
+  category text not null check (char_length(trim(category)) between 1 and 100),
+  status text not null default 'recording'
+    check (status in ('recording', 'completed', 'cancelled')),
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists recording_steps (
+  id uuid primary key default gen_random_uuid(),
+  recording_session_id uuid not null references recording_sessions(id) on delete cascade,
+  step_order integer not null check (step_order > 0),
+  page_url text not null,
+  page_title text not null default '',
+  action_type text not null
+    check (action_type in ('click', 'input', 'select', 'change')),
+  selector text not null,
+  xpath text,
+  element_label text not null,
+  instruction_title text not null,
+  instruction_text text not null check (char_length(trim(instruction_text)) > 0),
+  element_metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (recording_session_id, step_order)
+);
+
 create index if not exists idx_templates_status on templates(status);
 create index if not exists idx_templates_site_id on templates(site_id);
 create index if not exists idx_field_mappings_template_id on field_mappings(template_id);
@@ -147,6 +183,9 @@ create index if not exists idx_instructions_site_id on instructions(site_id);
 create index if not exists idx_instructions_workflow_order on instructions(workflow_key, step_order);
 create index if not exists idx_website_requests_status on website_requests(status);
 create index if not exists idx_website_requests_base_domain on website_requests(base_domain);
+create index if not exists idx_recording_sessions_domain_category on recording_sessions(base_domain, category, created_at desc);
+create index if not exists idx_recording_sessions_request on recording_sessions(website_request_id);
+create index if not exists idx_recording_steps_session_order on recording_steps(recording_session_id, step_order);
 
 -- AccessLens reads these tables through its private backend connection only.
 alter table sites enable row level security;
@@ -158,6 +197,8 @@ alter table instructions enable row level security;
 alter table validation_rules enable row level security;
 alter table anonymous_template_errors enable row level security;
 alter table website_requests enable row level security;
+alter table recording_sessions enable row level security;
+alter table recording_steps enable row level security;
 
 revoke all on table sites from anon, authenticated;
 revoke all on table templates from anon, authenticated;
@@ -168,4 +209,6 @@ revoke all on table instructions from anon, authenticated;
 revoke all on table validation_rules from anon, authenticated;
 revoke all on table anonymous_template_errors from anon, authenticated;
 revoke all on table website_requests from anon, authenticated;
+revoke all on table recording_sessions from anon, authenticated;
+revoke all on table recording_steps from anon, authenticated;
 
