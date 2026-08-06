@@ -1376,14 +1376,160 @@ function createRecordedGuidePanel(
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
 
-  panel.append(titlebar, introduction, categoryLabel, guideContent, status);
-
   let activeGuide: RecordedGuide | null = null;
   let currentStepIndex = 0;
   let completedStepIds = new Set<string>();
   let replayStepId: string | null = null;
   let replayFromStepIndex: number | null = null;
   let renderVersion = 0;
+
+  const aiSupport = document.createElement("section");
+  aiSupport.className = "accesslens-ai-support accesslens-recorded-ai-support";
+  aiSupport.setAttribute("aria-labelledby", "accesslens-recorded-ai-support-title");
+  const aiSupportTitle = document.createElement("h3");
+  aiSupportTitle.id = "accesslens-recorded-ai-support-title";
+  aiSupportTitle.className = "accesslens-ai-support-title";
+  aiSupportTitle.textContent = "Ask AI support";
+  const aiSupportLabel = document.createElement("label");
+  aiSupportLabel.textContent = "Describe your problem";
+  const aiSupportInput = document.createElement("textarea");
+  aiSupportInput.rows = 3;
+  aiSupportInput.maxLength = 500;
+  aiSupportInput.placeholder = "For example: I need to update my address, but I do not know which category to choose.";
+  aiSupportInput.setAttribute("aria-describedby", "accesslens-recorded-ai-support-help");
+  aiSupportLabel.append(aiSupportInput);
+  const aiSupportHelp = document.createElement("span");
+  aiSupportHelp.id = "accesslens-recorded-ai-support-help";
+  aiSupportHelp.className = "accesslens-ai-support-help";
+  aiSupportHelp.textContent = "Do not include names, passwords, identity numbers, or other personal details.";
+  const askAiButton = document.createElement("button");
+  askAiButton.type = "button";
+  askAiButton.className = "accesslens-ai-support-submit";
+  askAiButton.textContent = "Ask AI";
+  const aiSupportStatus = document.createElement("div");
+  aiSupportStatus.className = "accesslens-ai-support-status";
+  aiSupportStatus.setAttribute("role", "status");
+  aiSupportStatus.setAttribute("aria-live", "polite");
+  aiSupport.append(
+    aiSupportTitle,
+    aiSupportLabel,
+    aiSupportHelp,
+    askAiButton,
+    aiSupportStatus
+  );
+
+  panel.append(titlebar, introduction, categoryLabel, aiSupport, guideContent, status);
+
+  let aiSupportContextVersion = 0;
+  const clearAiSupport = () => {
+    aiSupportContextVersion++;
+    aiSupportInput.value = "";
+    aiSupportInput.disabled = false;
+    askAiButton.disabled = false;
+    askAiButton.textContent = "Ask AI";
+    aiSupportStatus.className = "accesslens-ai-support-status";
+    aiSupportStatus.replaceChildren();
+  };
+
+  const requestAiSupport = async () => {
+    const question = aiSupportInput.value.trim();
+    if (!question) {
+      aiSupportStatus.className = "accesslens-ai-support-status accesslens-ai-support-error";
+      aiSupportStatus.textContent = "Please describe your problem or what is difficult to understand.";
+      aiSupportInput.focus();
+      return;
+    }
+
+    const requestContextVersion = aiSupportContextVersion;
+    const currentStep = activeGuide?.steps[currentStepIndex];
+    askAiButton.disabled = true;
+    aiSupportInput.disabled = true;
+    askAiButton.textContent = "Thinking...";
+    aiSupportStatus.className = "accesslens-ai-support-status";
+    aiSupportStatus.textContent = activeGuide
+      ? "Creating simple guidance for this step..."
+      : "Finding the best support category...";
+
+    try {
+      const body: {
+        question: string;
+        url: string;
+        sessionId?: string;
+        stepId?: string;
+      } = {
+        question,
+        url: window.location.href
+      };
+      if (activeGuide) {
+        body.sessionId = activeGuide.id;
+      }
+      if (currentStep) {
+        body.stepId = currentStep.id;
+      }
+
+      const response = await apiFetch(`${backendApiUrl}/instructions/guides/ai-support`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+      if (!response.ok) {
+        throw new Error(await getApiError(response, "AI support is unavailable. Try again shortly."));
+      }
+
+      if (requestContextVersion !== aiSupportContextVersion) {
+        return;
+      }
+
+      const data = await response.json() as {
+        action: "select_category" | "simplify_instruction";
+        answer?: string;
+        category?: { id: string; name: string } | null;
+      };
+      if (!data.answer) {
+        throw new Error("AI support did not return guidance.");
+      }
+
+      aiSupportStatus.replaceChildren();
+      aiSupportStatus.className = "accesslens-ai-support-status accesslens-ai-support-answer";
+      const answer = document.createElement("p");
+      answer.textContent = data.answer;
+      aiSupportStatus.append(answer);
+
+      if (data.action === "select_category" && data.category) {
+        const selectCategoryButton = document.createElement("button");
+        selectCategoryButton.type = "button";
+        selectCategoryButton.className = "accesslens-ai-category-button";
+        selectCategoryButton.textContent = `Select ${data.category.name}`;
+        selectCategoryButton.addEventListener("click", () => {
+          categorySelect.value = data.category!.id;
+          categorySelect.dispatchEvent(new Event("change"));
+        });
+        aiSupportStatus.append(selectCategoryButton);
+      }
+    } catch (error) {
+      if (requestContextVersion !== aiSupportContextVersion) {
+        return;
+      }
+      aiSupportStatus.className = "accesslens-ai-support-status accesslens-ai-support-error";
+      aiSupportStatus.textContent = error instanceof Error
+        ? error.message
+        : "AI support is unavailable. Try again shortly.";
+    } finally {
+      if (requestContextVersion === aiSupportContextVersion) {
+        askAiButton.disabled = false;
+        aiSupportInput.disabled = false;
+        askAiButton.textContent = "Ask AI";
+      }
+    }
+  };
+
+  askAiButton.addEventListener("click", () => void requestAiSupport());
+  aiSupportInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      void requestAiSupport();
+    }
+  });
 
   const getCurrentGuideProgress = (): RecordedGuideProgress | null => activeGuide
     ? {
@@ -1447,6 +1593,8 @@ function createRecordedGuidePanel(
     completedStepIds = new Set<string>();
     replayStepId = null;
     replayFromStepIndex = null;
+    clearAiSupport();
+    panel.insertBefore(aiSupport, guideContent);
     guideContent.hidden = true;
     guideContent.replaceChildren();
     status.textContent = "";
@@ -1475,6 +1623,8 @@ function createRecordedGuidePanel(
     currentStepIndex = clamp(currentStepIndex, 0, activeGuide.steps.length - 1);
     const step = activeGuide.steps[currentStepIndex];
     const totalSteps = activeGuide.steps.length;
+    clearAiSupport();
+    panel.insertBefore(aiSupport, guideContent);
     guideContent.hidden = false;
     guideContent.replaceChildren();
     highlightTargetElement("");
@@ -1563,13 +1713,13 @@ function createRecordedGuidePanel(
       openPageButton.className = "accesslens-primary-button accesslens-open-step-page";
       openPageButton.textContent = "Open this step's page";
       openPageButton.addEventListener("click", () => void openStepPage(step));
-      guideContent.append(meta, title, instruction, progress, openPageButton, navigation);
+      guideContent.append(meta, title, instruction, progress, openPageButton, aiSupport, navigation);
       status.className = "accesslens-guide-target-status";
       status.textContent = "This step is on another page. Open it to continue with highlighting.";
       return;
     }
 
-    guideContent.append(meta, title, instruction, progress, navigation);
+    guideContent.append(meta, title, instruction, progress, aiSupport, navigation);
     status.className = "accesslens-guide-target-status";
 
     const tryHighlight = (attempt: number) => {
@@ -1618,6 +1768,7 @@ function createRecordedGuidePanel(
     savedReplayFromStepIndex: number | null = null
   ) => {
     categorySelect.disabled = true;
+    panel.insertBefore(aiSupport, guideContent);
     guideContent.hidden = false;
     guideContent.textContent = "Loading instructions…";
     status.textContent = "";
@@ -1643,6 +1794,7 @@ function createRecordedGuidePanel(
 
   categorySelect.addEventListener("change", () => {
     const sessionId = categorySelect.value;
+    clearAiSupport();
     highlightTargetElement("");
     if (!sessionId) {
       void resetGuide();

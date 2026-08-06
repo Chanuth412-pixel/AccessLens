@@ -916,6 +916,39 @@
   font-weight: 600;
 }
 
+.accesslens-ai-support-answer p {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.accesslens-ai-support-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.accesslens-ai-category-button {
+  width: 100%;
+  margin-top: 9px;
+  border: 1px solid #86efac;
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #166534;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.accesslens-ai-category-button:hover,
+.accesslens-ai-category-button:focus-visible {
+  border-color: #16a34a;
+  background: #dcfce7;
+}
+
 .accesslens-ai-support-error {
   color: #b91c1c;
   font-weight: 600;
@@ -1071,6 +1104,10 @@
   color: #0f172a;
   font-size: 17px;
   line-height: 1.35;
+}
+
+.accesslens-recorded-guide-content .accesslens-recorded-ai-support {
+  margin: 0;
 }
 
 .accesslens-recorded-guide-instruction {
