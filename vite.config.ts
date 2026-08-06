@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         index: "index.html",
         openPanel: "openPanel.html",
+        recordingContentScript: "accesslens-prototype/content.js",
         contentScript: "src/content/contentScript.ts",
         background: "src/background/background.ts"
       },

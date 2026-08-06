@@ -2577,6 +2577,19 @@ async function injectOverlay() {
   renderFormContent();
 }
 
-void injectOverlay();
-initOriginalPageDraftHandler();
+type AccessLensCombinedGlobal = typeof globalThis & {
+  __accesslensRecorderModePromise?: Promise<boolean>;
+};
+
+async function startUserMode() {
+  const recorderModePromise = (globalThis as AccessLensCombinedGlobal).__accesslensRecorderModePromise;
+  if (recorderModePromise && await recorderModePromise) {
+    return;
+  }
+
+  void injectOverlay();
+  initOriginalPageDraftHandler();
+}
+
+void startUserMode();
 

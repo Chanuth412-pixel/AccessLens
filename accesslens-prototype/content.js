@@ -1,4 +1,59 @@
-const recordingTokenParam = '_accesslens_recording';
+void (() => {
+  const recordingTokenParam = '_accesslens_recording';
+
+  function readRecordingSetup() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('accesslens_recording_setup', (items) => {
+        resolve(items?.accesslens_recording_setup || null);
+      });
+    });
+  }
+
+  function recordingMatchesCurrentSite(setup) {
+    if (!setup?.sessionId) return false;
+    try {
+      const currentHostname = window.location.hostname.toLowerCase().replace(/^www\./, '');
+      const recordingHostname = String(setup.baseDomain || new URL(setup.url).hostname)
+        .toLowerCase()
+        .replace(/^www\./, '');
+      return currentHostname === recordingHostname || currentHostname.endsWith(`.${recordingHostname}`);
+    } catch {
+      return false;
+    }
+  }
+
+  function recordingSessionExists(sessionId) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: 'AL_RECORDING_API', path: `/api/developer/recordings/${encodeURIComponent(sessionId)}` },
+        (response) => resolve(Boolean(response?.ok && response?.data?.session))
+      );
+    });
+  }
+
+  async function selectRecorderMode() {
+    const token = new URL(window.location.href).searchParams.get(recordingTokenParam);
+    const setup = await readRecordingSetup();
+    const storedSessionId = recordingMatchesCurrentSite(setup) ? setup.sessionId : null;
+    const sessionId = token || storedSessionId;
+    if (!sessionId) return false;
+
+    const sessionExists = await recordingSessionExists(sessionId);
+    // A stored developer session remains in recorder mode when the API is
+    // temporarily unavailable, so the recorder can display its normal error.
+    return sessionExists || Boolean(storedSessionId && storedSessionId === sessionId);
+  }
+
+  const recorderModePromise = selectRecorderMode();
+  globalThis.__accesslensRecorderModePromise = recorderModePromise;
+
+  void recorderModePromise.then((recorderMode) => {
+    if (recorderMode) {
+      startRecorder();
+    }
+  });
+
+  function startRecorder() {
 
 const panelHtml = `
   <!-- Visual-only redesign styles. IDs and behavior hooks below are preserved. -->
@@ -492,8 +547,6 @@ let currentStepIndex = 0;
 let highlightedElement = null;
 let recordingSetup = null;
 let isSaving = false;
-let isSuggestingInstruction = false;
-let suggestionRequestId = 0;
 
 const btnRecord = document.getElementById('al-btn-record');
 const btnClose = document.getElementById('al-btn-close');
@@ -703,8 +756,9 @@ function renderStepEditor(shouldHighlight = isPlaying) {
   stepSaveState.textContent = step.saved ? 'Saved' : 'Needs saving';
   stepSaveState.style.background = step.saved ? '#14532d' : '#78350f';
   stepSaveState.style.color = step.saved ? '#bbf7d0' : '#fde68a';
-  btnSuggestInstruction.disabled = isSuggestingInstruction || isSaving;
-  btnSuggestInstruction.textContent = isSuggestingInstruction ? 'Suggesting...' : 'Suggest with AI';
+  btnSuggestInstruction.disabled = Boolean(step.isSuggesting) || isSaving;
+  btnSuggestInstruction.textContent = step.isSuggesting ? 'Suggesting...' : 'Suggest with AI';
+  setAiSuggestionStatus(step.suggestionMessage || '', Boolean(step.suggestionError));
   instructionEditor.style.display = isPlaying ? 'none' : 'flex';
   instructionView.style.display = isPlaying ? 'block' : 'none';
   playbackNav.style.display = isPlaying ? 'flex' : 'none';
@@ -726,16 +780,14 @@ function setAiSuggestionStatus(message, isError = false) {
   aiSuggestionStatus.textContent = message || '';
 }
 
-async function suggestInstructionForCurrentStep({ automatic = false } = {}) {
-  const step = steps[currentStepIndex];
-  if (!recordingSetup?.sessionId || !step || step.saved || isSaving || isSuggestingInstruction) return;
+async function suggestInstructionForStep(step, { automatic = false } = {}) {
+  if (!recordingSetup?.sessionId || !step || !steps.includes(step) || step.saved || step.isSuggesting) return;
 
-  const originalInstruction = instructionInput.value;
-  const requestId = suggestionRequestId + 1;
-  suggestionRequestId = requestId;
-  isSuggestingInstruction = true;
-  setAiSuggestionStatus(automatic ? 'AI is drafting an instruction...' : 'Creating AI suggestion...');
-  renderStepEditor(false);
+  const originalInstruction = step.instruction || '';
+  step.isSuggesting = true;
+  step.suggestionMessage = automatic ? 'AI is drafting an instruction...' : 'Creating AI suggestion...';
+  step.suggestionError = false;
+  if (steps[currentStepIndex] === step) renderStepEditor(false);
 
   try {
     const data = await recordingApi(
@@ -755,35 +807,45 @@ async function suggestInstructionForCurrentStep({ automatic = false } = {}) {
     );
     const suggestion = (data?.suggestion || '').trim();
     if (!suggestion) throw new Error('AI did not return an instruction.');
-    if (requestId !== suggestionRequestId) return;
+    if (!steps.includes(step)) return;
 
-    if (!instructionInput.value.trim() || instructionInput.value === originalInstruction) {
+    if (!step.instruction.trim() || step.instruction === originalInstruction) {
       step.instruction = suggestion;
       step.saved = false;
-      instructionInput.value = suggestion;
       await persistLocalState();
-      setAiSuggestionStatus('AI suggestion added. Edit it if needed, then save.');
+      step.suggestionMessage = 'AI suggestion added. Edit it if needed, then save.';
+      step.suggestionError = false;
     } else {
-      setAiSuggestionStatus('AI suggestion ready, but your manual text was kept.');
+      step.suggestionMessage = 'AI suggestion ready, but your manual text was kept.';
+      step.suggestionError = false;
     }
   } catch (error) {
+    if (!steps.includes(step)) return;
     const fallback = step.action === 'input' || step.action === 'change'
       ? `Enter the required information in ${step.label}.`
       : step.action === 'select'
         ? `Select the correct option from ${step.label}.`
         : `Click ${step.label}.`;
-    if (!instructionInput.value.trim()) {
+    if (!step.instruction.trim()) {
       step.instruction = fallback;
-      instructionInput.value = fallback;
       await persistLocalState();
     }
-    setAiSuggestionStatus(`AI suggestion unavailable: ${error.message}`, true);
+    step.suggestionMessage = `AI suggestion unavailable: ${error.message}`;
+    step.suggestionError = true;
   } finally {
-    if (requestId === suggestionRequestId) {
-      isSuggestingInstruction = false;
-      renderStepEditor(false);
-    }
+    step.isSuggesting = false;
+    if (steps[currentStepIndex] === step) renderStepEditor(false);
   }
+}
+
+function suggestInstructionForCurrentStep(options = {}) {
+  return suggestInstructionForStep(steps[currentStepIndex], options);
+}
+
+function resumeMissingInstructionSuggestions() {
+  steps
+    .filter((step) => !step.saved && !step.instruction.trim())
+    .forEach((step) => void suggestInstructionForStep(step, { automatic: true }));
 }
 
 function updateControls() {
@@ -857,6 +919,11 @@ async function initialize() {
         if (!step.saved || !mergedSteps.has(step.stepOrder)) mergedSteps.set(step.stepOrder, step);
       });
       steps = Array.from(mergedSteps.values()).sort((left, right) => left.stepOrder - right.stepOrder);
+      steps.forEach((step) => {
+        step.isSuggesting = false;
+        step.suggestionMessage = '';
+        step.suggestionError = false;
+      });
       // A new Developer Console session is ready to record, but capture only
       // starts after the developer explicitly clicks Record. Preserve active
       // capture only while navigating within the same existing session.
@@ -889,17 +956,11 @@ async function initialize() {
   }
   updateControls();
   renderStepEditor();
+  resumeMissingInstructionSuggestions();
 }
 
 function handleRecordEvent(event) {
   if (!isRecording || !(event.target instanceof Element) || event.target.closest('#al-panel')) return;
-  const pendingStepIndex = steps.findIndex((step) => !step.saved);
-  if (pendingStepIndex >= 0) {
-    currentStepIndex = pendingStepIndex;
-    statusText.textContent = `Save or delete step ${pendingStepIndex + 1} before recording another action.`;
-    renderStepEditor(false);
-    return;
-  }
   const element = event.target;
   const tagName = element.tagName.toLowerCase();
   const validTags = ['input', 'select', 'textarea', 'button', 'a', 'label', 'div', 'span', 'td', 'li'];
@@ -910,8 +971,14 @@ function handleRecordEvent(event) {
   const previous = steps[steps.length - 1];
   if (previous && previous.selector === selector && previous.action === action) return;
 
+  // Only database-saved steps advance the workflow sequence. An unsaved
+  // capture is the draft for the next step, so a later page action replaces
+  // that draft instead of creating another numbered step.
+  const savedSteps = steps.filter((recordedStep) => recordedStep.saved);
+  steps = savedSteps;
+
   const step = {
-    stepOrder: steps.length + 1,
+    stepOrder: savedSteps.length + 1,
     pageUrl: cleanPageUrl(),
     pageTitle: document.title.slice(0, 300),
     action,
@@ -926,13 +993,16 @@ function handleRecordEvent(event) {
       name: element.getAttribute('name'),
       required: element.hasAttribute('required')
     },
-    saved: false
+    saved: false,
+    isSuggesting: false,
+    suggestionMessage: '',
+    suggestionError: false
   };
   steps.push(step);
   currentStepIndex = steps.length - 1;
   isPlaying = false;
   void persistLocalState();
-  statusText.textContent = `Step ${step.stepOrder} captured. Add its instruction and save it.`;
+  statusText.textContent = `Step ${step.stepOrder} captured. AI is drafting its instruction; continue recording or save it when ready.`;
   updateControls();
   renderStepEditor();
   void suggestInstructionForCurrentStep({ automatic: true });
@@ -1135,3 +1205,5 @@ btnClose.addEventListener('click', () => {
 });
 
 void initialize();
+  }
+})();

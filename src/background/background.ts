@@ -12,6 +12,7 @@ type AccessLensWindowSession = {
 type RuntimeMessage = {
   type: string;
   url?: string;
+  path?: string;
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
@@ -76,6 +77,7 @@ declare const chrome: {
 
 const workflowProgressStorageKey = "accesslens-workflow-progress";
 const recordedGuideProgressStorageKey = "accesslens-recorded-guide-progress";
+const recordingApiBaseUrl = "http://localhost:4000";
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -90,6 +92,32 @@ function getSessionKey(sessionId: string) {
 const windowSessions = new Map<string, AccessLensWindowSession>();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "AL_RECORDING_API" && message.path) {
+    if (!message.path.startsWith("/api/developer/recordings")) {
+      sendResponse({ ok: false, error: "Unsupported recording API path." });
+      return;
+    }
+
+    fetch(`${recordingApiBaseUrl}${message.path}`, {
+      method: message.method || "GET",
+      headers: { "Content-Type": "application/json" },
+      body: message.body === undefined ? undefined : JSON.stringify(message.body)
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        sendResponse({
+          ok: response.ok,
+          status: response.status,
+          data,
+          error: response.ok
+            ? undefined
+            : (data as { error?: string } | null)?.error || "Recording API request failed."
+        });
+      })
+      .catch((error: Error) => sendResponse({ ok: false, status: 0, error: error.message }));
+    return true;
+  }
+
   if (message.type === "GET_RECORDED_GUIDE_PROGRESS") {
     chrome.storage.session.get(recordedGuideProgressStorageKey, (items) => {
       if (chrome.runtime.lastError) {

@@ -20,13 +20,13 @@
       "exclude_matches": [
         "https://www.gov.uk/*"
       ],
-      "js": ["assets/contentScript.js"]
+      "js": ["assets/recordingContentScript.js", "assets/contentScript.js"]
     },
     {
       "matches": [
         "https://www.gov.uk/calculate-your-redundancy-pay/*"
       ],
-      "js": ["assets/contentScript.js"]
+      "js": ["assets/recordingContentScript.js", "assets/contentScript.js"]
     }
   ]
 }
