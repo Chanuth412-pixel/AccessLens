@@ -1383,8 +1383,17 @@ function createRecordedGuidePanel(
   let replayFromStepIndex: number | null = null;
   let renderVersion = 0;
 
+  const aiSupportToggle = document.createElement("button");
+  aiSupportToggle.type = "button";
+  aiSupportToggle.className = "accesslens-ai-support-toggle accesslens-recorded-ai-support-toggle";
+  aiSupportToggle.textContent = "Ask AI support";
+  aiSupportToggle.setAttribute("aria-expanded", "false");
+  aiSupportToggle.setAttribute("aria-controls", "accesslens-recorded-ai-support");
+
   const aiSupport = document.createElement("section");
   aiSupport.className = "accesslens-ai-support accesslens-recorded-ai-support";
+  aiSupport.id = "accesslens-recorded-ai-support";
+  aiSupport.hidden = true;
   aiSupport.setAttribute("aria-labelledby", "accesslens-recorded-ai-support-title");
   const aiSupportTitle = document.createElement("h3");
   aiSupportTitle.id = "accesslens-recorded-ai-support-title";
@@ -1418,11 +1427,22 @@ function createRecordedGuidePanel(
     aiSupportStatus
   );
 
-  panel.append(titlebar, introduction, categoryLabel, aiSupport, guideContent, status);
+  panel.append(
+    titlebar,
+    introduction,
+    categoryLabel,
+    aiSupportToggle,
+    aiSupport,
+    guideContent,
+    status
+  );
 
   let aiSupportContextVersion = 0;
   const clearAiSupport = () => {
     aiSupportContextVersion++;
+    aiSupport.hidden = true;
+    aiSupportToggle.setAttribute("aria-expanded", "false");
+    aiSupportToggle.textContent = "Ask AI support";
     aiSupportInput.value = "";
     aiSupportInput.disabled = false;
     askAiButton.disabled = false;
@@ -1523,6 +1543,17 @@ function createRecordedGuidePanel(
     }
   };
 
+  aiSupportToggle.addEventListener("click", () => {
+    const expanded = aiSupport.hidden;
+    aiSupport.hidden = !expanded;
+    aiSupportToggle.setAttribute("aria-expanded", String(expanded));
+    aiSupportToggle.textContent = expanded ? "Hide AI support" : "Ask AI support";
+
+    if (expanded) {
+      aiSupportInput.focus();
+    }
+  });
+
   askAiButton.addEventListener("click", () => void requestAiSupport());
   aiSupportInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -1594,6 +1625,7 @@ function createRecordedGuidePanel(
     replayStepId = null;
     replayFromStepIndex = null;
     clearAiSupport();
+    panel.insertBefore(aiSupportToggle, guideContent);
     panel.insertBefore(aiSupport, guideContent);
     guideContent.hidden = true;
     guideContent.replaceChildren();
@@ -1624,6 +1656,7 @@ function createRecordedGuidePanel(
     const step = activeGuide.steps[currentStepIndex];
     const totalSteps = activeGuide.steps.length;
     clearAiSupport();
+    panel.insertBefore(aiSupportToggle, guideContent);
     panel.insertBefore(aiSupport, guideContent);
     guideContent.hidden = false;
     guideContent.replaceChildren();
@@ -1713,13 +1746,30 @@ function createRecordedGuidePanel(
       openPageButton.className = "accesslens-primary-button accesslens-open-step-page";
       openPageButton.textContent = "Open this step's page";
       openPageButton.addEventListener("click", () => void openStepPage(step));
-      guideContent.append(meta, title, instruction, progress, openPageButton, aiSupport, navigation);
+      guideContent.append(
+        meta,
+        title,
+        instruction,
+        progress,
+        openPageButton,
+        aiSupportToggle,
+        aiSupport,
+        navigation
+      );
       status.className = "accesslens-guide-target-status";
       status.textContent = "This step is on another page. Open it to continue with highlighting.";
       return;
     }
 
-    guideContent.append(meta, title, instruction, progress, aiSupport, navigation);
+    guideContent.append(
+      meta,
+      title,
+      instruction,
+      progress,
+      aiSupportToggle,
+      aiSupport,
+      navigation
+    );
     status.className = "accesslens-guide-target-status";
 
     const tryHighlight = (attempt: number) => {
@@ -1768,6 +1818,7 @@ function createRecordedGuidePanel(
     savedReplayFromStepIndex: number | null = null
   ) => {
     categorySelect.disabled = true;
+    panel.insertBefore(aiSupportToggle, guideContent);
     panel.insertBefore(aiSupport, guideContent);
     guideContent.hidden = false;
     guideContent.textContent = "Loading instructions…";

@@ -562,6 +562,21 @@ function cleanPageUrl(rawUrl = window.location.href) {
   return url.toString();
 }
 
+function normalizeHostname(value) {
+  return String(value || '').trim().toLowerCase().replace(/^www\./, '');
+}
+
+function isCurrentRecordingSite(setup) {
+  if (!setup) return false;
+  try {
+    const currentHostname = normalizeHostname(window.location.hostname);
+    const recordingHostname = normalizeHostname(setup.baseDomain || new URL(setup.url).hostname);
+    return currentHostname === recordingHostname || currentHostname.endsWith(`.${recordingHostname}`);
+  } catch {
+    return false;
+  }
+}
+
 function escapeCss(value) {
   return typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
     ? CSS.escape(value)
@@ -773,9 +788,11 @@ async function suggestInstructionForCurrentStep({ automatic = false } = {}) {
 
 function updateControls() {
   btnStop.disabled = !isRecording;
-  btnPlay.disabled = steps.length === 0 || isRecording;
-  btnClear.disabled = recordingSetup?.status === 'completed';
-  btnRecord.disabled = isRecording || !recordingSetup || recordingSetup.status === 'completed';
+  btnPlay.disabled = steps.length === 0 || isRecording || recordingSetup?.status !== 'completed';
+  btnClear.disabled = !recordingSetup || recordingSetup.status === 'completed';
+  // Keep Record accessible while idle. The click handler validates that the
+  // Developer Console has prepared a database session before capture begins.
+  btnRecord.disabled = isRecording || recordingSetup?.status === 'completed';
   contextText.textContent = recordingSetup
     ? `${recordingSetup.category} - ${recordingSetup.baseDomain || new URL(recordingSetup.url).hostname}`
     : 'Start from the AccessLens Developer Console';
@@ -794,6 +811,29 @@ async function initialize() {
   isRecording = Boolean(stored.al_isRecording);
   const storedStepIndex = currentStepIndex;
   const storedIsPlaying = isPlaying;
+  const storedIsRecording = isRecording;
+
+  if (token && token !== recordingSetup?.sessionId) {
+    recordingSetup = null;
+    steps = [];
+    currentStepIndex = 0;
+    isPlaying = false;
+    isRecording = false;
+  }
+
+  // Recording data is scoped to the requested website. Do not show a previous
+  // website's completed (or active) recording on unrelated pages.
+  if (!token && recordingSetup && !isCurrentRecordingSite(recordingSetup)) {
+    recordingSetup = null;
+    steps = [];
+    currentStepIndex = 0;
+    isPlaying = false;
+    isRecording = false;
+    statusText.textContent = 'Open a recording from the Developer Console.';
+    updateControls();
+    renderStepEditor(false);
+    return;
+  }
 
   const sessionId = token || recordingSetup?.sessionId;
   if (sessionId) {
@@ -817,7 +857,13 @@ async function initialize() {
         if (!step.saved || !mergedSteps.has(step.stepOrder)) mergedSteps.set(step.stepOrder, step);
       });
       steps = Array.from(mergedSteps.values()).sort((left, right) => left.stepOrder - right.stepOrder);
-      isRecording = session.status === 'recording';
+      // A new Developer Console session is ready to record, but capture only
+      // starts after the developer explicitly clicks Record. Preserve active
+      // capture only while navigating within the same existing session.
+      isRecording = !token
+        && storedSessionId === session.id
+        && session.status === 'recording'
+        && storedIsRecording;
       isPlaying = session.status === 'completed' && storedSessionId === session.id && storedIsPlaying;
       currentStepIndex = isPlaying
         ? Math.min(Math.max(0, storedStepIndex), Math.max(0, steps.length - 1))

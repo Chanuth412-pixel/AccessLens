@@ -902,6 +902,7 @@ function App() {
         category: session.category,
         siteName: session.site_name,
         url: session.site_url,
+        baseDomain: session.base_domain,
         startedAt: session.started_at,
         status: session.status
       };
@@ -913,20 +914,31 @@ function App() {
       }
 
       const browserApi = globalThis as typeof globalThis & {
-        chrome?: { storage?: { local?: { set: (items: Record<string, unknown>) => void } } };
+        chrome?: {
+          storage?: {
+            local?: {
+              set: (items: Record<string, unknown>, callback?: () => void) => void;
+            };
+          };
+        };
       };
-      browserApi.chrome?.storage?.local?.set({
-        accesslens_recording_setup: recordingSetup,
-        al_isRecording: true,
-        al_isPlaying: false,
-        al_steps: [],
-        al_playbackIndex: 0
-      });
+      const extensionStorage = browserApi.chrome?.storage?.local;
+      if (extensionStorage) {
+        await new Promise<void>((resolve) => {
+          extensionStorage.set({
+            accesslens_recording_setup: recordingSetup,
+            al_isRecording: false,
+            al_isPlaying: false,
+            al_steps: [],
+            al_playbackIndex: 0
+          }, resolve);
+        });
+      }
 
       const targetUrl = new URL(session.site_url);
       targetUrl.searchParams.set("_accesslens_recording", session.id);
       targetWindow.location.replace(targetUrl.toString());
-      setMessage(`Recording the "${category}" flow. Add an instruction for every captured step.`);
+      setMessage(`The "${category}" flow is ready. Click Record in the website overlay to begin.`);
       setRecordingRequest(null);
       setRecordingCategory("");
       setCategoryError("");
