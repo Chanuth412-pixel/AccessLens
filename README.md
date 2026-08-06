@@ -199,6 +199,8 @@ After frontend or extension changes, run `npm run build`, reload the extension f
 | `GET` | `/api/templates/match?url=...` | Legacy URL-only approved-template match |
 | `GET` | `/api/templates/resolve?url=...&heading=...` | Resolve exactly one approved template by URL and normalized H1 |
 | `GET` | `/api/instructions/resolve?url=...&heading=...` | Resolve user-facing workflow guidance by URL and normalized H1 |
+| `GET` | `/api/instructions/guides?url=...` | List the latest completed recorded guide for each category on a website |
+| `GET` | `/api/instructions/guides/:sessionId` | Return the ordered steps for a completed recorded guide |
 | `GET` | `/api/instructions/workflows/:workflowKey/first` | Return the first active workflow instruction |
 | `POST` | `/api/instructions/:instructionId/ai-support` | Return a short AI simplification of an active instruction |
 | `POST` | `/api/developer/website-requests/:id/generate-template` | Generate a pending draft for a requested website |

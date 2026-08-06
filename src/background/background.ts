@@ -1,4 +1,4 @@
-import type { WorkflowProgress } from "../types/instruction";
+import type { RecordedGuideProgress, WorkflowProgress } from "../types/instruction";
 
 type AccessLensWindowSession = {
   id: string;
@@ -19,6 +19,7 @@ type RuntimeMessage = {
   sessionId?: string;
   values?: Record<string, string>;
   progress?: WorkflowProgress;
+  guideProgress?: RecordedGuideProgress;
   draftKey?: string;
   draftValues?: Record<string, string>;
 };
@@ -41,9 +42,12 @@ declare const chrome: {
     session: {
       get: (
         key: string,
-        callback: (items: Record<string, WorkflowProgress | undefined>) => void
+        callback: (items: Record<string, WorkflowProgress | RecordedGuideProgress | undefined>) => void
       ) => void;
-      set: (items: Record<string, WorkflowProgress>, callback: () => void) => void;
+      set: (
+        items: Record<string, WorkflowProgress | RecordedGuideProgress>,
+        callback: () => void
+      ) => void;
       remove: (key: string, callback: () => void) => void;
     };
     local: {
@@ -71,6 +75,7 @@ declare const chrome: {
 };
 
 const workflowProgressStorageKey = "accesslens-workflow-progress";
+const recordedGuideProgressStorageKey = "accesslens-recorded-guide-progress";
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -85,6 +90,42 @@ function getSessionKey(sessionId: string) {
 const windowSessions = new Map<string, AccessLensWindowSession>();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "GET_RECORDED_GUIDE_PROGRESS") {
+    chrome.storage.session.get(recordedGuideProgressStorageKey, (items) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not read guide progress." });
+        return;
+      }
+
+      sendResponse({ ok: true, guideProgress: items?.[recordedGuideProgressStorageKey] ?? null });
+    });
+    return true;
+  }
+
+  if (message.type === "SAVE_RECORDED_GUIDE_PROGRESS" && message.guideProgress) {
+    chrome.storage.session.set({ [recordedGuideProgressStorageKey]: message.guideProgress }, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not save guide progress." });
+        return;
+      }
+
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (message.type === "CLEAR_RECORDED_GUIDE_PROGRESS") {
+    chrome.storage.session.remove(recordedGuideProgressStorageKey, () => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message || "Could not clear guide progress." });
+        return;
+      }
+
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (message.type === "GET_LOCAL_DRAFT" && message.draftKey) {
     const key = message.draftKey;
     chrome.storage.local.get(key, (items) => {

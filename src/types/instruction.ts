@@ -26,3 +26,41 @@ export type WorkflowProgress = {
   lastValidUrl: string;
   currentStepReady: boolean;
 };
+
+export type RecordedGuideCategory = {
+  id: string;
+  category: string;
+  site_name: string;
+  step_count: number;
+  updated_at: string;
+};
+
+export type RecordedGuideStep = {
+  id: string;
+  recording_session_id: string;
+  step_order: number;
+  page_url: string;
+  page_title: string;
+  action_type: "click" | "input" | "select" | "change";
+  selector: string;
+  xpath: string | null;
+  element_label: string;
+  instruction_title: string;
+  instruction_text: string;
+  element_metadata: Record<string, unknown>;
+};
+
+export type RecordedGuide = RecordedGuideCategory & {
+  site_url: string;
+  base_domain: string;
+  steps: RecordedGuideStep[];
+};
+
+export type RecordedGuideProgress = {
+  sessionId: string;
+  stepIndex: number;
+  completedStepIds?: string[];
+  replayStepId?: string;
+  replayFromStepIndex?: number;
+  navigationPending?: boolean;
+};

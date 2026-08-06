@@ -1,6 +1,13 @@
 import stylesText from "./contentStyles.css?inline";
 import type { AccessLensField, AccessLensTemplate } from "../types/accessLensTemplate";
-import type { AccessLensInstruction, WorkflowProgress } from "../types/instruction";
+import type {
+  AccessLensInstruction,
+  RecordedGuide,
+  RecordedGuideCategory,
+  RecordedGuideProgress,
+  RecordedGuideStep,
+  WorkflowProgress
+} from "../types/instruction";
 
 const overlayId = "accesslens-overlay-root";
 const backendApiUrl = "http://localhost:4000/api";
@@ -163,6 +170,7 @@ declare const chrome: {
         body?: unknown;
         session?: unknown;
         progress?: WorkflowProgress;
+        guideProgress?: RecordedGuideProgress;
         draftKey?: string;
         draftValues?: Record<string, string>;
       },
@@ -172,6 +180,7 @@ declare const chrome: {
         data?: unknown;
         error?: string;
         progress?: WorkflowProgress | null;
+        guideProgress?: RecordedGuideProgress | null;
         values?: Record<string, string> | null;
       } | undefined) => void
     ) => void;
@@ -371,6 +380,54 @@ function clearWorkflowProgress() {
   });
 }
 
+function getRecordedGuideProgress() {
+  return new Promise<RecordedGuideProgress | null>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve(null);
+      return;
+    }
+
+    runtime.sendMessage({ type: "GET_RECORDED_GUIDE_PROGRESS" }, (response) => {
+      if (runtime.lastError || !response?.ok) {
+        resolve(null);
+        return;
+      }
+      resolve(response.guideProgress ?? null);
+    });
+  });
+}
+
+function saveRecordedGuideProgress(guideProgress: RecordedGuideProgress) {
+  return new Promise<void>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve();
+      return;
+    }
+
+    runtime.sendMessage({ type: "SAVE_RECORDED_GUIDE_PROGRESS", guideProgress }, () => {
+      void runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+function clearRecordedGuideProgress() {
+  return new Promise<void>((resolve) => {
+    const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+    if (!runtime || typeof runtime.sendMessage !== "function") {
+      resolve();
+      return;
+    }
+
+    runtime.sendMessage({ type: "CLEAR_RECORDED_GUIDE_PROGRESS" }, () => {
+      void runtime.lastError;
+      resolve();
+    });
+  });
+}
+
 async function apiFetch(
   url: string,
   options: { method?: string; headers?: Record<string, string>; body?: unknown } = {}
@@ -425,6 +482,30 @@ async function getApiError(response: Response, fallback: string) {
 
 function getCurrentPageHeading() {
   return normalizeText(document.querySelector("h1")?.textContent, 300);
+}
+
+async function fetchRecordedGuideCategories() {
+  const response = await apiFetch(
+    `${backendApiUrl}/instructions/guides?url=${encodeURIComponent(window.location.href)}`
+  );
+  if (!response.ok) {
+    throw new Error(await getApiError(response, "AccessLens could not load website categories."));
+  }
+
+  const data = await response.json() as { categories: RecordedGuideCategory[] };
+  return data.categories ?? [];
+}
+
+async function fetchRecordedGuide(sessionId: string) {
+  const response = await apiFetch(
+    `${backendApiUrl}/instructions/guides/${encodeURIComponent(sessionId)}`
+  );
+  if (!response.ok) {
+    throw new Error(await getApiError(response, "AccessLens could not load this guide."));
+  }
+
+  const data = await response.json() as { guide: RecordedGuide };
+  return data.guide;
 }
 
 async function resolveInstructionForCurrentPage() {
@@ -1119,32 +1200,65 @@ function createWebsiteRequestCard(language: Language) {
 
 let currentHighlightedElement: HTMLElement | null = null;
 let originalOutlineStyle = "";
+let originalOutlineOffsetStyle = "";
 let originalBoxShadowStyle = "";
 
-function highlightTargetElement(selector: string) {
+function findTargetElement(selector: string, xpath?: string | null) {
+  if (selector) {
+    try {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (element) {
+        return element;
+      }
+    } catch {
+      // Try the recorded XPath when a selector is stale or invalid.
+    }
+  }
+
+  if (xpath) {
+    try {
+      const result = document.evaluate(
+        xpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      return result.singleNodeValue instanceof HTMLElement ? result.singleNodeValue : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function highlightTargetElement(selector: string, xpath?: string | null) {
   if (currentHighlightedElement) {
     currentHighlightedElement.style.outline = originalOutlineStyle;
+    currentHighlightedElement.style.outlineOffset = originalOutlineOffsetStyle;
     currentHighlightedElement.style.boxShadow = originalBoxShadowStyle;
     currentHighlightedElement = null;
   }
 
   if (!selector) {
-    return;
+    return false;
   }
 
-  try {
-    const element = document.querySelector<HTMLElement>(selector);
-    if (element) {
-      currentHighlightedElement = element;
-      originalOutlineStyle = element.style.outline;
-      originalBoxShadowStyle = element.style.boxShadow;
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-      element.style.outline = "4px solid #2563eb";
-      element.style.boxShadow = "0 0 16px rgba(37, 99, 235, 0.7)";
-    }
-  } catch {
-    // Ignore selector syntax error
+  const element = findTargetElement(selector, xpath);
+  if (element) {
+    currentHighlightedElement = element;
+    originalOutlineStyle = element.style.outline;
+    originalOutlineOffsetStyle = element.style.outlineOffset;
+    originalBoxShadowStyle = element.style.boxShadow;
+    element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    element.style.outline = "4px solid #2563eb";
+    element.style.outlineOffset = "3px";
+    element.style.boxShadow = "0 0 0 7px rgba(37, 99, 235, 0.2), 0 0 22px rgba(37, 99, 235, 0.75)";
+    return true;
   }
+
+  return false;
 }
 
 function createReviewDetails(values: Record<string, string>, fields: AccessLensField[], language: Language) {
@@ -1186,6 +1300,404 @@ function createResultList(results: FillResult[]) {
   return list;
 }
 
+function comparablePageUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.searchParams.delete("_accesslens_recording");
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function isStepOnCurrentPage(step: RecordedGuideStep) {
+  return comparablePageUrl(step.page_url) === comparablePageUrl(window.location.href);
+}
+
+function wasPageReloaded() {
+  const navigationEntry = performance.getEntriesByType("navigation")[0];
+  return typeof PerformanceNavigationTiming !== "undefined"
+    && navigationEntry instanceof PerformanceNavigationTiming
+    && navigationEntry.type === "reload";
+}
+
+function createRecordedGuidePanel(
+  categories: RecordedGuideCategory[],
+  restoredProgress: RecordedGuideProgress | null
+) {
+  const panel = document.createElement("section");
+  panel.className = "accesslens-panel accesslens-recorded-guide-panel";
+  panel.setAttribute("aria-label", "AccessLens website guide");
+
+  const titlebar = document.createElement("div");
+  titlebar.className = "accesslens-titlebar";
+  const brand = document.createElement("div");
+  brand.className = "accesslens-brand-group";
+  const logo = document.createElement("span");
+  logo.className = "accesslens-logo-mark";
+  logo.textContent = "AL";
+  const heading = document.createElement("h2");
+  heading.textContent = "AccessLens Guide";
+  brand.append(logo, heading);
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "accesslens-icon-button";
+  closeButton.setAttribute("aria-label", "Close AccessLens guide");
+  closeButton.textContent = "×";
+  titlebar.append(brand, closeButton);
+
+  const introduction = document.createElement("p");
+  introduction.className = "accesslens-description";
+  introduction.textContent = "Choose what you want to do on this website.";
+
+  const categoryLabel = document.createElement("label");
+  categoryLabel.className = "accesslens-guide-category-label";
+  categoryLabel.textContent = "Category";
+  const categorySelect = document.createElement("select");
+  categorySelect.className = "accesslens-guide-category-select";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a category";
+  categorySelect.append(placeholder);
+  categories.forEach((category) => {
+    const option = document.createElement("option");
+    option.value = category.id;
+    option.textContent = `${category.category} (${category.step_count} step${category.step_count === 1 ? "" : "s"})`;
+    categorySelect.append(option);
+  });
+  categoryLabel.append(categorySelect);
+
+  const guideContent = document.createElement("div");
+  guideContent.className = "accesslens-recorded-guide-content";
+  guideContent.hidden = true;
+  const status = document.createElement("p");
+  status.className = "accesslens-guide-target-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+
+  panel.append(titlebar, introduction, categoryLabel, guideContent, status);
+
+  let activeGuide: RecordedGuide | null = null;
+  let currentStepIndex = 0;
+  let completedStepIds = new Set<string>();
+  let replayStepId: string | null = null;
+  let replayFromStepIndex: number | null = null;
+  let renderVersion = 0;
+
+  const getCurrentGuideProgress = (): RecordedGuideProgress | null => activeGuide
+    ? {
+        sessionId: activeGuide.id,
+        stepIndex: currentStepIndex,
+        completedStepIds: [...completedStepIds],
+        replayStepId: replayStepId ?? undefined,
+        replayFromStepIndex: replayFromStepIndex ?? undefined
+      }
+    : null;
+
+  const persistCurrentGuideProgress = () => {
+    const progress = getCurrentGuideProgress();
+    return progress ? saveRecordedGuideProgress(progress) : Promise.resolve();
+  };
+
+  const showCompletedStepMessage = () => {
+    status.className = "accesslens-guide-target-status accesslens-guide-step-completed";
+    status.textContent = "This step is already completed. Select Next to continue.";
+  };
+
+  const hasControlCompletionState = (step: RecordedGuideStep, target: HTMLElement) => {
+    if (target.getAttribute("aria-pressed") === "true" || target.getAttribute("aria-checked") === "true") {
+      return true;
+    }
+
+    if (target instanceof HTMLInputElement) {
+      if (target.type === "checkbox" || target.type === "radio") {
+        return target.checked;
+      }
+      return step.action_type === "input" && target.value.trim().length > 0;
+    }
+
+    if (target instanceof HTMLTextAreaElement) {
+      return step.action_type === "input" && target.value.trim().length > 0;
+    }
+
+    if (target instanceof HTMLSelectElement) {
+      return step.action_type === "select" && target.value.trim().length > 0;
+    }
+
+    return step.action_type === "click"
+      && (target.matches(":disabled") || target.getAttribute("data-completed") === "true");
+  };
+
+  const hasLaterVisibleStep = (stepIndex: number) => {
+    if (!activeGuide) return false;
+    return activeGuide.steps.slice(stepIndex + 1).some((laterStep) => {
+      if (!isStepOnCurrentPage(laterStep)) return false;
+      const laterTarget = findTargetElement(laterStep.selector, laterStep.xpath);
+      if (!laterTarget) return false;
+      const style = window.getComputedStyle(laterTarget);
+      return style.display !== "none" && style.visibility !== "hidden";
+    });
+  };
+
+  const resetGuide = async () => {
+    renderVersion++;
+    activeGuide = null;
+    currentStepIndex = 0;
+    completedStepIds = new Set<string>();
+    replayStepId = null;
+    replayFromStepIndex = null;
+    guideContent.hidden = true;
+    guideContent.replaceChildren();
+    status.textContent = "";
+    highlightTargetElement("");
+    await clearRecordedGuideProgress();
+  };
+
+  const openStepPage = async (step: RecordedGuideStep) => {
+    const destination = new URL(step.page_url);
+    if (destination.protocol === "http:" || destination.protocol === "https:") {
+      const progress = getCurrentGuideProgress();
+      if (progress) {
+        await saveRecordedGuideProgress({ ...progress, navigationPending: true });
+      }
+      window.location.assign(destination.href);
+    }
+  };
+
+  const renderStep = () => {
+    if (!activeGuide || activeGuide.steps.length === 0) {
+      return;
+    }
+
+    renderVersion++;
+    const version = renderVersion;
+    currentStepIndex = clamp(currentStepIndex, 0, activeGuide.steps.length - 1);
+    const step = activeGuide.steps[currentStepIndex];
+    const totalSteps = activeGuide.steps.length;
+    guideContent.hidden = false;
+    guideContent.replaceChildren();
+    highlightTargetElement("");
+
+    const meta = document.createElement("div");
+    meta.className = "accesslens-recorded-guide-meta";
+    const stepNumber = document.createElement("strong");
+    stepNumber.textContent = `Step ${currentStepIndex + 1} of ${totalSteps}`;
+    const action = document.createElement("span");
+    action.textContent = step.action_type === "input" ? "Enter information" : step.action_type;
+    meta.append(stepNumber, action);
+
+    const title = document.createElement("h3");
+    title.textContent = step.instruction_title;
+    const instruction = document.createElement("p");
+    instruction.className = "accesslens-recorded-guide-instruction";
+    instruction.textContent = step.instruction_text;
+    const progress = document.createElement("div");
+    progress.className = "accesslens-guide-progress";
+    progress.setAttribute("role", "progressbar");
+    progress.setAttribute("aria-valuemin", "1");
+    progress.setAttribute("aria-valuemax", String(totalSteps));
+    progress.setAttribute("aria-valuenow", String(currentStepIndex + 1));
+    const progressFill = document.createElement("span");
+    progressFill.style.width = `${((currentStepIndex + 1) / totalSteps) * 100}%`;
+    progress.append(progressFill);
+
+    const navigation = document.createElement("div");
+    navigation.className = "accesslens-recorded-guide-navigation";
+    const previousButton = document.createElement("button");
+    previousButton.type = "button";
+    previousButton.className = "accesslens-secondary-button";
+    previousButton.textContent = "Back";
+    previousButton.disabled = currentStepIndex === 0;
+    previousButton.addEventListener("click", async () => {
+      if (!activeGuide || currentStepIndex === 0) return;
+      currentStepIndex--;
+      replayStepId = activeGuide.steps[currentStepIndex].id;
+      replayFromStepIndex = replayFromStepIndex === null
+        ? currentStepIndex
+        : Math.min(replayFromStepIndex, currentStepIndex);
+      activeGuide.steps.slice(currentStepIndex).forEach((replayStep) => {
+        completedStepIds.delete(replayStep.id);
+      });
+      await persistCurrentGuideProgress();
+      const previousStep = activeGuide.steps[currentStepIndex];
+      const previousTarget = findTargetElement(previousStep.selector, previousStep.xpath);
+      if (!isStepOnCurrentPage(previousStep) || !previousTarget) {
+        await openStepPage(previousStep);
+        return;
+      }
+      renderStep();
+    });
+
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "accesslens-primary-button";
+    const isLastStep = currentStepIndex === totalSteps - 1;
+    nextButton.textContent = isLastStep ? "Finish" : "Next";
+    nextButton.addEventListener("click", async () => {
+      if (!activeGuide) return;
+      if (isLastStep) {
+        const completedCategory = activeGuide.category;
+        await resetGuide();
+        categorySelect.value = "";
+        status.className = "accesslens-guide-target-status accesslens-message-success";
+        status.textContent = `${completedCategory} guide completed. You can choose another category.`;
+        return;
+      }
+
+      replayStepId = null;
+      currentStepIndex++;
+      await persistCurrentGuideProgress();
+      const nextStep = activeGuide.steps[currentStepIndex];
+      if (!isStepOnCurrentPage(nextStep)) {
+        await openStepPage(nextStep);
+        return;
+      }
+      renderStep();
+    });
+    navigation.append(previousButton, nextButton);
+
+    if (!isStepOnCurrentPage(step)) {
+      const openPageButton = document.createElement("button");
+      openPageButton.type = "button";
+      openPageButton.className = "accesslens-primary-button accesslens-open-step-page";
+      openPageButton.textContent = "Open this step's page";
+      openPageButton.addEventListener("click", () => void openStepPage(step));
+      guideContent.append(meta, title, instruction, progress, openPageButton, navigation);
+      status.className = "accesslens-guide-target-status";
+      status.textContent = "This step is on another page. Open it to continue with highlighting.";
+      return;
+    }
+
+    guideContent.append(meta, title, instruction, progress, navigation);
+    status.className = "accesslens-guide-target-status";
+
+    const tryHighlight = (attempt: number) => {
+      if (version !== renderVersion) return;
+      const targetElement = findTargetElement(step.selector, step.xpath);
+      const isReplayingStep = replayStepId === step.id
+        || (replayFromStepIndex !== null && currentStepIndex >= replayFromStepIndex);
+      if (
+        !isReplayingStep
+        && (
+          completedStepIds.has(step.id)
+          || (targetElement && hasControlCompletionState(step, targetElement))
+        )
+      ) {
+        completedStepIds.add(step.id);
+        void persistCurrentGuideProgress();
+        highlightTargetElement("");
+        showCompletedStepMessage();
+        return;
+      }
+
+      if (targetElement && highlightTargetElement(step.selector, step.xpath)) {
+        status.className = "accesslens-guide-target-status accesslens-message-success";
+        status.textContent = "The element for this step is highlighted on the page.";
+        return;
+      }
+      if (attempt < 4) {
+        window.setTimeout(() => tryHighlight(attempt + 1), 500 * (attempt + 1));
+      } else if (!isReplayingStep && hasLaterVisibleStep(currentStepIndex)) {
+        completedStepIds.add(step.id);
+        void persistCurrentGuideProgress();
+        showCompletedStepMessage();
+      } else {
+        status.className = "accesslens-guide-target-status";
+        status.textContent = "AccessLens cannot find this step's element on the current page.";
+      }
+    };
+    tryHighlight(0);
+  };
+
+  const loadGuide = async (
+    sessionId: string,
+    stepIndex = 0,
+    savedCompletedStepIds: string[] = [],
+    savedReplayStepId: string | null = null,
+    savedReplayFromStepIndex: number | null = null
+  ) => {
+    categorySelect.disabled = true;
+    guideContent.hidden = false;
+    guideContent.textContent = "Loading instructions…";
+    status.textContent = "";
+    try {
+      activeGuide = await fetchRecordedGuide(sessionId);
+      currentStepIndex = clamp(stepIndex, 0, Math.max(0, activeGuide.steps.length - 1));
+      completedStepIds = new Set(savedCompletedStepIds);
+      replayStepId = savedReplayStepId;
+      replayFromStepIndex = savedReplayFromStepIndex;
+      await persistCurrentGuideProgress();
+      renderStep();
+    } catch (error) {
+      activeGuide = null;
+      guideContent.replaceChildren();
+      guideContent.hidden = true;
+      status.className = "accesslens-guide-target-status accesslens-message-error";
+      status.textContent = error instanceof Error ? error.message : "The selected guide could not be loaded.";
+      await clearRecordedGuideProgress();
+    } finally {
+      categorySelect.disabled = false;
+    }
+  };
+
+  categorySelect.addEventListener("change", () => {
+    const sessionId = categorySelect.value;
+    highlightTargetElement("");
+    if (!sessionId) {
+      void resetGuide();
+      return;
+    }
+    completedStepIds = new Set<string>();
+    replayStepId = null;
+    replayFromStepIndex = null;
+    void loadGuide(sessionId);
+  });
+
+  const handleRecordedStepInteraction = (event: Event) => {
+    if (!activeGuide || guideContent.hidden) return;
+    const step = activeGuide.steps[currentStepIndex];
+    if (!step) return;
+
+    const expectedEvent = step.action_type === "click" ? "click" : "change";
+    if (event.type !== expectedEvent || !(event.target instanceof Node)) return;
+
+    const target = findTargetElement(step.selector, step.xpath);
+    if (!target || (event.target !== target && !target.contains(event.target))) return;
+
+    completedStepIds.add(step.id);
+    void persistCurrentGuideProgress();
+    showCompletedStepMessage();
+  };
+
+  document.addEventListener("click", handleRecordedStepInteraction, true);
+  document.addEventListener("change", handleRecordedStepInteraction, true);
+
+  closeButton.addEventListener("click", () => {
+    renderVersion++;
+    highlightTargetElement("");
+    void clearRecordedGuideProgress();
+    document.removeEventListener("click", handleRecordedStepInteraction, true);
+    document.removeEventListener("change", handleRecordedStepInteraction, true);
+    panel.getRootNode() instanceof ShadowRoot
+      ? (panel.getRootNode() as ShadowRoot).host.remove()
+      : panel.remove();
+  });
+
+  if (restoredProgress && categories.some((category) => category.id === restoredProgress.sessionId)) {
+    categorySelect.value = restoredProgress.sessionId;
+    void loadGuide(
+      restoredProgress.sessionId,
+      restoredProgress.stepIndex,
+      restoredProgress.completedStepIds ?? [],
+      restoredProgress.replayStepId ?? null,
+      restoredProgress.replayFromStepIndex ?? null
+    );
+  }
+
+  return panel;
+}
+
 async function injectOverlay() {
   if (document.getElementById(overlayId) || !document.body) {
     return;
@@ -1201,6 +1713,34 @@ async function injectOverlay() {
 
   const loadingPanel = createStatusPanel("AccessLens", "Checking this page and preparing its form...");
   shadowRoot.append(loadingPanel);
+
+  try {
+    const [recordedCategories, storedRecordedProgress] = await Promise.all([
+      fetchRecordedGuideCategories(),
+      getRecordedGuideProgress()
+    ]);
+    let recordedProgress = storedRecordedProgress;
+
+    if (recordedProgress?.navigationPending) {
+      recordedProgress = { ...recordedProgress, navigationPending: undefined };
+      await saveRecordedGuideProgress(recordedProgress);
+    } else if (recordedProgress && wasPageReloaded()) {
+      await clearRecordedGuideProgress();
+      recordedProgress = null;
+    }
+
+    if (recordedCategories.length > 0) {
+      loadingPanel.remove();
+      shadowRoot.append(createRecordedGuidePanel(recordedCategories, recordedProgress));
+      return;
+    }
+    if (recordedProgress) {
+      await clearRecordedGuideProgress();
+    }
+  } catch {
+    // Preserve the approved-template flow when the optional recorded-guide
+    // lookup is temporarily unavailable.
+  }
 
   let instruction: AccessLensInstruction | null = null;
   let workflowAccess: WorkflowPageAccess | null = null;

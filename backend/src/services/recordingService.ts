@@ -33,8 +33,83 @@ export type RecordingStepRow = {
   updated_at: string;
 };
 
+export type PublicRecordingGuideSummary = {
+  id: string;
+  category: string;
+  site_name: string;
+  step_count: number;
+  updated_at: string;
+};
+
+export type PublicRecordingGuide = PublicRecordingGuideSummary & {
+  site_url: string;
+  base_domain: string;
+  steps: RecordingStepRow[];
+};
+
 function normalizeDomain(rawUrl: string) {
   return new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+}
+
+export async function listCompletedRecordingGuides(rawUrl: string) {
+  const baseDomain = normalizeDomain(rawUrl);
+  const result = await query<PublicRecordingGuideSummary>(
+    `
+      select distinct on (lower(trim(rs.category)))
+        rs.id,
+        rs.category,
+        rs.site_name,
+        count(rst.id)::int as step_count,
+        rs.updated_at
+      from recording_sessions rs
+      join recording_steps rst on rst.recording_session_id = rs.id
+      where rs.base_domain = $1
+        and rs.status = 'completed'
+      group by rs.id
+      order by lower(trim(rs.category)), rs.completed_at desc nulls last, rs.updated_at desc
+    `,
+    [baseDomain]
+  );
+
+  return result.rows.sort((left, right) => left.category.localeCompare(right.category));
+}
+
+export async function getCompletedRecordingGuide(sessionId: string) {
+  const sessionResult = await query<Omit<PublicRecordingGuide, "steps" | "step_count"> & { step_count: number }>(
+    `
+      select
+        rs.id,
+        rs.category,
+        rs.site_name,
+        rs.site_url,
+        rs.base_domain,
+        count(rst.id)::int as step_count,
+        rs.updated_at
+      from recording_sessions rs
+      join recording_steps rst on rst.recording_session_id = rs.id
+      where rs.id = $1
+        and rs.status = 'completed'
+      group by rs.id
+    `,
+    [sessionId]
+  );
+
+  const session = sessionResult.rows[0];
+  if (!session) {
+    return null;
+  }
+
+  const stepsResult = await query<RecordingStepRow>(
+    `
+      select *
+      from recording_steps
+      where recording_session_id = $1
+      order by step_order
+    `,
+    [sessionId]
+  );
+
+  return { ...session, steps: stepsResult.rows };
 }
 
 export async function createRecordingSession(websiteRequestId: string, category: string) {

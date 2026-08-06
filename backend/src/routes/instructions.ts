@@ -7,6 +7,10 @@ import {
   parseSupportedUrl,
   resolveInstruction
 } from "../services/instructionService.js";
+import {
+  getCompletedRecordingGuide,
+  listCompletedRecordingGuides
+} from "../services/recordingService.js";
 
 export const instructionsRouter = Router();
 
@@ -32,6 +36,50 @@ function isAiSupportRateLimited(clientId: string) {
   aiSupportHistory.set(clientId, recentRequests);
   return false;
 }
+
+instructionsRouter.get("/guides", async (request, response, next) => {
+  try {
+    const url = String(request.query.url ?? "").trim();
+    if (!url) {
+      response.status(400).json({ error: "Missing required query parameter: url" });
+      return;
+    }
+
+    try {
+      parseSupportedUrl(url);
+    } catch (error) {
+      response.status(400).json({
+        error: error instanceof Error ? error.message : "Invalid page URL"
+      });
+      return;
+    }
+
+    const categories = await listCompletedRecordingGuides(url);
+    response.json({ categories });
+  } catch (error) {
+    next(error);
+  }
+});
+
+instructionsRouter.get("/guides/:sessionId", async (request, response, next) => {
+  try {
+    const sessionId = z.string().uuid().safeParse(request.params.sessionId);
+    if (!sessionId.success) {
+      response.status(400).json({ error: "Invalid guide ID" });
+      return;
+    }
+
+    const guide = await getCompletedRecordingGuide(sessionId.data);
+    if (!guide) {
+      response.status(404).json({ error: "Completed guide not found" });
+      return;
+    }
+
+    response.json({ guide });
+  } catch (error) {
+    next(error);
+  }
+});
 
 instructionsRouter.get("/resolve", async (request, response, next) => {
   try {

@@ -1001,6 +1001,116 @@
   border-color: #16a34a;
 }
 
+.accesslens-recorded-guide-panel {
+  display: grid;
+  gap: 12px;
+  width: min(410px, calc(100vw - 32px));
+}
+
+.accesslens-recorded-guide-panel .accesslens-description {
+  margin: 0;
+}
+
+.accesslens-guide-category-label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.accesslens-guide-category-select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 8px 36px 8px 11px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 14px;
+}
+
+.accesslens-guide-category-select:focus {
+  border-color: #2563eb;
+  outline: 3px solid rgba(37, 99, 235, 0.15);
+}
+
+.accesslens-recorded-guide-content {
+  display: grid;
+  gap: 11px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.accesslens-recorded-guide-content[hidden] {
+  display: none;
+}
+
+.accesslens-recorded-guide-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accesslens-recorded-guide-meta span {
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #dbeafe;
+  text-transform: capitalize;
+}
+
+.accesslens-recorded-guide-content h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.accesslens-recorded-guide-instruction {
+  margin: 0;
+  color: #475569;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.accesslens-recorded-guide-navigation {
+  display: flex;
+  gap: 8px;
+}
+
+.accesslens-recorded-guide-navigation .accesslens-secondary-button,
+.accesslens-recorded-guide-navigation .accesslens-primary-button {
+  flex: 1;
+}
+
+.accesslens-open-step-page {
+  width: 100%;
+}
+
+.accesslens-guide-target-status {
+  min-height: 18px;
+  margin: 0;
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.accesslens-guide-step-completed {
+  border-left: 3px solid #16a34a;
+  border-radius: 5px;
+  padding: 8px 10px;
+  background: #f0fdf4;
+  color: #166534;
+  font-weight: 650;
+}
+
 @media (max-width: 900px) {
   .accesslens-guide {
     top: 16px;
