@@ -19,6 +19,8 @@ Tutorials can become outdated when the website layout, field names, or requireme
 Videos and blogs cannot understand the exact problem a user is facing.
 Switching between the government website and a tutorial can cause confusion, mistakes, and session timeouts.
 
+Many public-service applications also spread one process across several web pages. Users must repeatedly move between pages, remember earlier answers, and recover manually if the connection drops. AccessLens currently simplifies and fills one page at a time; the planned multi-page experience will combine the fields from every page in a supported process into one unified form that users can complete once.
+
 ## What AccessLens Does
 
 AccessLens finds supported forms, such as forms on `gov.lk`, and shows them in a simpler interface in both English and Sinhala. It gives help directly on the website, so users do not need separate tutorials.
@@ -31,6 +33,23 @@ AccessLens finds supported forms, such as forms on `gov.lk`, and shows them in a
 - **Different Display Options:** Lets users see all fields at once or complete the form one step at a time. It supports English and Sinhala and can appear on the same page or in a separate window.
 - **Protects User Privacy:** Adds the user’s information to the original form only after the user confirms it. It does not submit the form automatically.
 - **Tools for Developers:** Uses approved PostgreSQL templates to reduce unnecessary AI use. For forms it does not know, it creates a privacy-safe draft and sends it to a developer dashboard for checking, editing, and approval.
+- **Interruption-Safe Local Drafts:** Saves in-progress values from both the AccessLens form and the original website form in Chrome's local extension storage. A page reload or network interruption does not erase the local draft, and successful completion clears it.
+- **Recorded Website Guides:** Lets developers create a category, record a website flow across pages, capture target elements, edit AI-suggested instructions, replay the steps, and publish the completed recording as user guidance.
+- **Category-Based Help:** Shows completed guide categories for the current site and can use AI to recommend the best category or explain the active step in simpler language without asking for personal details.
+- **One Extension Build:** Packages recording tools, guided support, page detection, simplified form filling, and the developer console workflow into the same Manifest V3 project.
+
+## Current Scope and Planned Multi-Page Form
+
+Today, AccessLens can simplify and fill the form on the **current page**. Values are cached locally on the user's device, so the draft can be restored after a refresh or connection interruption. AccessLens still fills only the current page and never submits it automatically.
+
+The next major extension is designed for services that divide one application across many pages. AccessLens will discover the approved page sequence, combine all mapped fields into **one form**, let the user complete and review everything at once, and then apply the saved answers to each original page in the correct order with explicit user control.
+
+<p align="center">
+  <img src="docs/images/accesslens-multipage-roadmap.png" alt="Planned AccessLens workflow in which fields from several form pages are combined into one form while an interruption-safe draft remains stored locally on the user's device" width="100%" />
+</p>
+
+> [!NOTE]
+> The unified multi-page form is a planned feature, not a claim about the current release. Existing workflow guidance can track steps across pages, but form aggregation and page-by-page answer application are still to be implemented.
 
 > [!IMPORTANT]
 > AccessLens is a prototype. The developer API currently has a placeholder authentication guard and must not be exposed publicly without real authentication and authorization.
@@ -41,7 +60,7 @@ AccessLens finds supported forms, such as forms on `gov.lk`, and shows them in a
   <img src="docs/images/accesslens-architecture.svg" alt="AccessLens architecture showing the website, Chrome extension, backend API, AI provider, PostgreSQL, and developer console" width="100%" />
 </p>
 
-The extension sends the backend only structural form metadata such as labels, types, required flags, options, and selectors. Personal values entered by the user remain in browser memory and are not sent to the API or stored in PostgreSQL.
+The extension sends the backend only structural form metadata such as labels, types, required flags, options, and selectors. Personal values are never sent to the API or stored in PostgreSQL. While a form is in progress, drafts can be stored in Chrome's local extension storage on the user's device so they can survive reloads and connection interruptions; they are cleared after successful filling or submission.
 
 <p align="center">
   <img src="docs/images/accesslens-workflow.svg" alt="AccessLens template workflow from page detection through approved template lookup, AI draft generation, developer review, and user-confirmed form filling" width="100%" />
@@ -58,7 +77,7 @@ The extension sends the page URL and normalized headings to the backend API via 
 
 ### 3. Secure UI Injection & Workflow Tracking
 Once a template is resolved, the extension renders a simplified React-based overlay or wizard using Shadow DOM to prevent CSS leakage or conflicts with the host government page.
-* **State Management:** It uses encrypted browser local storage (`WorkflowProgress`) to track completed steps, preventing out-of-order execution.
+* **State Management:** It uses Chrome session storage for workflow and recorded-guide progress, and Chrome local extension storage for page-scoped form drafts. This supports reload and interruption recovery while keeping entered values off the backend.
 * **Filling, Not Submitting:** When the user completes the simplified UI, the extension maps their local inputs to the original form's CSS selectors and dispatches native browser events. The final submission action is intentionally left to the user.
 
 ### 4. Path-Aware AI Context
@@ -204,6 +223,13 @@ After frontend or extension changes, run `npm run build`, reload the extension f
 | `POST` | `/api/instructions/guides/ai-support` | Recommend a recorded-guide category or simplify its current instruction with the configured AI model |
 | `GET` | `/api/instructions/workflows/:workflowKey/first` | Return the first active workflow instruction |
 | `POST` | `/api/instructions/:instructionId/ai-support` | Return a short AI simplification of an active instruction |
+| `POST` | `/api/developer/recordings` | Start a developer recording session for a website request and category |
+| `GET` | `/api/developer/recordings?websiteRequestId=...` | List recorded categories and their ordered steps for a website request |
+| `GET` | `/api/developer/recordings/:sessionId` | Load one recording session and its steps |
+| `POST` | `/api/developer/recordings/:sessionId/instruction-suggestion` | Draft a privacy-aware instruction for a captured step with AI |
+| `PUT` | `/api/developer/recordings/:sessionId/steps/:stepOrder` | Save or update a captured recording step |
+| `DELETE` | `/api/developer/recordings/:sessionId/steps/:stepOrder` | Delete a captured step and re-order the remaining steps |
+| `PATCH` | `/api/developer/recordings/:sessionId` | Complete or cancel a recording session |
 | `POST` | `/api/developer/website-requests/:id/generate-template` | Generate a pending draft for a requested website |
 | `GET` | `/api/developer/stats` | Read developer-console counts |
 | `GET` | `/api/developer/templates/pending` | List pending drafts |
@@ -224,7 +250,7 @@ AccessLens is designed around three enforced template policies:
 }
 ```
 
-The database stores site configuration, template versions, field mappings, validation rules, runner instructions, and anonymous template errors. It must not store names, identity numbers, phone numbers, passwords, OTPs, payment details, or completed form values.
+The database stores site configuration, template versions, field mappings, validation rules, runner instructions, recording sessions, recorded steps, and anonymous template errors. It must not store names, identity numbers, phone numbers, passwords, OTPs, payment details, or completed form values. In-progress values may exist only in Chrome's local extension storage on the user's device and are never included in backend or AI requests.
 
 AI requests contain a page URL, title, language, and a filtered structural snapshot. Current input values are excluded. Generated selectors are checked against selectors observed in that snapshot, and new templates are saved as `pending_review` rather than automatically approved.
 
@@ -232,10 +258,12 @@ AI requests contain a page URL, title, language, and a filtered structural snaps
 
 ```text
 AccessLens/
+├── accesslens-prototype/ Recorder content script used by the combined extension build
 ├── backend/              Express API, validation, and AI/template services
 ├── database/             PostgreSQL schema and demo seed
 ├── docs/                 Architecture notes and README artwork
 ├── public/               Chrome manifest and local test form
+├── supabase/migrations/  Supabase-compatible schema migrations
 ├── src/
 │   ├── background/       Extension service worker
 │   ├── content/          Page overlay, form discovery, and native filling
@@ -247,6 +275,30 @@ AccessLens/
 ```
 
 For a deeper explanation of component boundaries and data handling, see [the architecture notes](docs/frontend-backend-database.md) and [the multi-step workflow guidance documentation](docs/workflows-and-guidance.md).
+
+## Roadmap and TODOs
+
+### Completed in the current prototype
+
+- [x] Resolve approved templates by URL and page heading.
+- [x] Offer all-fields and step-by-step simplified form modes in English and Sinhala.
+- [x] Review values before filling the original page, without automatic submission.
+- [x] Persist AccessLens and original-page drafts in local extension storage and restore them after reloads or connection interruptions.
+- [x] Record, save, edit, delete, replay, and complete categorized website guide steps.
+- [x] Generate AI instruction suggestions for recorded steps.
+- [x] Let users select recorded guide categories and ask AI for category or step-specific help.
+- [x] Combine the recorder and user-facing form helper into one Chrome extension build.
+
+### Planned next
+
+- [ ] Define a versioned multi-page workflow schema that links every approved page and field in one application.
+- [ ] Aggregate mapped fields from all pages into one unified AccessLens form.
+- [ ] Save one page-independent local draft for the complete application and add draft expiry and manual-clear controls.
+- [ ] Apply reviewed answers to each original page in sequence, pausing for user confirmation before navigation and final submission.
+- [ ] Detect changed pages, expired sessions, validation errors, and interrupted connections, then resume from the last confirmed page without losing the local draft.
+- [ ] Add conflict handling when a website changes after a multi-page draft was created.
+- [ ] Add automated tests for reload recovery, offline recovery, multi-page navigation, and local-draft cleanup.
+- [ ] Complete accessibility and Sinhala-language reviews for the combined multi-page experience.
 
 ## Production checklist
 

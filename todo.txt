@@ -1,5 +1,27 @@
 AccessLens Setup And Test Checklist
 
+Development Status And Roadmap
+
+Completed:
+- One-page simplified form detection, review, and fill flow.
+- Local Chrome extension draft storage for AccessLens fields and original website fields.
+- Draft restoration after page reloads or connection interruptions.
+- Developer recording sessions with categories, captured steps, replay, and AI instruction suggestions.
+- User-facing recorded guide categories and AI category/step support.
+- Recording and user-facing helpers combined into one Manifest V3 extension build.
+
+Next:
+- Define the versioned schema for one application that spans many pages.
+- Combine the approved fields from all pages into one AccessLens form.
+- Store one page-independent local draft for the complete multi-page application.
+- Fill each original page in order while keeping navigation and final submission under user control.
+- Resume safely after connection loss, reloads, expired sessions, or validation errors.
+- Add draft expiry, manual-clear controls, website-change conflict handling, and multi-page automated tests.
+
+Important scope note:
+The current version fills one page at a time. The combined multi-page form is planned work.
+In-progress values stay in Chrome's local extension storage on the user's device and are not sent to the backend.
+
 1. Install frontend dependencies
 
 Open the project folder:
