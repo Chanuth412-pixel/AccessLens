@@ -90,6 +90,20 @@ To support new government portals safely, AccessLens uses a human-in-the-loop de
 3. The draft is saved in PostgreSQL with a `pending_review` status.
 4. A developer uses the local React console to manually edit, validate, and approve the mapping via the `/api/developer/templates` endpoints before it becomes active for end users.
 
+### 6. Step Recording & AI Instruction Generation
+
+<p align="center">
+  <img src="docs/images/accesslens-recording-ai-workflow.png" alt="AccessLens process showing a developer selecting a guide category, recording a website step, using AI to draft an instruction from structural metadata, reviewing the draft, and publishing the ordered steps as a user guide" width="100%" />
+</p>
+
+The recording workflow converts a developer's interaction with a website into reviewed, reusable guidance:
+
+1. **Choose a category:** The developer starts from a website support request and names the process being recorded, such as registration or updating an address.
+2. **Record a step:** The recorder captures the selected page element, action type, selector, page URL, label, and other structural metadata. It does not capture the value entered into the field.
+3. **Generate the instruction:** AccessLens sends the privacy-filtered step context to the configured AI provider, which drafts a short instruction for that specific recorded action.
+4. **Review before saving:** The developer edits or accepts the draft and saves the step. AI output never becomes user guidance without this human review.
+5. **Publish the ordered guide:** After every step is saved, the recording is completed and becomes a category-based guide that users can follow from the extension. Users can also ask AI to recommend a category or simplify the current instruction.
+
 ---
 ## Tech stack
 
@@ -98,7 +112,7 @@ To support new government portals safely, AccessLens uses a human-in-the-loop de
 | Browser extension | Chrome Manifest V3, React, TypeScript, Vite, Shadow DOM |
 | Backend API | Node.js, Express, TypeScript, Zod |
 | Database | PostgreSQL with `pgcrypto` and row-level security enabled |
-| AI template generation | Groq or OpenAI through the OpenAI-compatible SDK |
+| AI template and instruction generation | Groq or OpenAI through the OpenAI-compatible SDK |
 
 ## Prerequisites
 
@@ -106,7 +120,7 @@ To support new government portals safely, AccessLens uses a human-in-the-loop de
 - npm
 - PostgreSQL
 - Google Chrome or another Chromium browser that can load unpacked extensions
-- A Groq or OpenAI API key only if you want automatic draft generation
+- A Groq or OpenAI API key only if you want automatic template drafts, recorded-step instruction suggestions, or user-facing AI support
 
 ## Local setup
 
